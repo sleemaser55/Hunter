@@ -1,0 +1,115 @@
+/* Custom styles for Security Hunter application */
+
+/* Overall spacing and typography adjustments */
+body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.container {
+    flex: 1;
+}
+
+.footer {
+    margin-top: auto;
+}
+
+/* Icon sizing and placement */
+.feather {
+    width: 18px;
+    height: 18px;
+    vertical-align: text-bottom;
+}
+
+.icon-small {
+    width: 16px;
+    height: 16px;
+}
+
+/* Card and content spacing */
+.card {
+    margin-bottom: 1rem;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+}
+
+.card-header {
+    background-color: rgba(0, 0, 0, 0.1);
+}
+
+/* Code and pre formatting */
+pre {
+    max-height: 400px;
+    overflow-y: auto;
+    margin-bottom: 0;
+}
+
+code {
+    font-size: 0.9em;
+}
+
+/* Table improvements */
+.table-hover tbody tr:hover {
+    background-color: rgba(0, 123, 255, 0.1);
+}
+
+.table td, .table th {
+    vertical-align: middle;
+}
+
+/* Modal adjustments */
+.modal-content {
+    border-radius: 0.5rem;
+}
+
+.modal-backdrop {
+    background-color: rgba(0, 0, 0, 0.7);
+}
+
+/* List group customizations */
+.list-group-item.active {
+    background-color: var(--bs-primary);
+    border-color: var(--bs-primary);
+}
+
+.tactic-item:hover {
+    background-color: rgba(0, 123, 255, 0.1);
+}
+
+.technique-item {
+    transition: background-color 0.2s;
+}
+
+/* Badge customization */
+.badge {
+    font-weight: 500;
+    text-transform: capitalize;
+    padding: 0.35em 0.65em;
+}
+
+/* Utility classes */
+.cursor-pointer {
+    cursor: pointer;
+}
+
+.overflow-y-auto {
+    overflow-y: auto;
+}
+
+.max-height-400 {
+    max-height: 400px;
+}
+
+/* Query results table */
+#results-table td {
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#results-table td:hover {
+    white-space: normal;
+    word-break: break-word;
+    overflow: visible;
+}

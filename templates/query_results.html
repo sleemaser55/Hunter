@@ -1,0 +1,538 @@
+{% extends "layout.html" %}
+
+{% block title %}Query Results{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="d-flex justify-content-between align-items-center">
+            <h1 id="results-title">Query Results</h1>
+            <div>
+                <button id="back-btn" class="btn btn-secondary me-2">
+                    <i data-feather="arrow-left" class="me-1"></i> Back
+                </button>
+                <button id="export-csv-btn" class="btn btn-primary" disabled>
+                    <i data-feather="download" class="me-1"></i> Export CSV
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div id="results-loading" class="text-center py-5">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Loading results...</p>
+        </div>
+        
+        <div id="no-results-container" class="text-center py-5 d-none">
+            <div class="alert alert-info">
+                <h4 class="alert-heading">No Results Found</h4>
+                <p>Your query did not return any results for the specified time range.</p>
+                <hr>
+                <p class="mb-0">Try expanding your time range or modifying your query parameters.</p>
+            </div>
+        </div>
+        
+        <div id="error-container" class="text-center py-5 d-none">
+            <div class="alert alert-danger">
+                <h4 class="alert-heading">Error</h4>
+                <p id="error-message">An error occurred while executing your query.</p>
+                <hr>
+                <p id="error-details" class="mb-0"></p>
+            </div>
+        </div>
+        
+        <div id="results-container" class="d-none">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Query Information</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div id="rule-info-container" class="mb-3 d-none">
+                                <h6>Rule Information</h6>
+                                <div id="rule-info"></div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <h6>Query</h6>
+                                <pre id="query-text" class="bg-dark text-light p-2 rounded"></pre>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <h6>Statistics</h6>
+                                <ul id="query-stats" class="list-group list-group-flush"></ul>
+                            </div>
+                            
+                            <div id="filters-container" class="mb-3">
+                                <h6>Filters</h6>
+                                <div class="input-group mb-2">
+                                    <input type="text" id="filter-input" class="form-control" placeholder="Filter results...">
+                                    <button id="apply-filter-btn" class="btn btn-outline-secondary">Apply</button>
+                                </div>
+                                <div id="active-filters" class="mt-2"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="card-title mb-0">Results</h5>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="show-all-fields">
+                            <label class="form-check-label" for="show-all-fields">
+                                Show all fields
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table id="results-table" class="table table-hover mb-0">
+                            <thead>
+                                <tr id="results-header"></tr>
+                            </thead>
+                            <tbody id="results-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div id="results-count">Showing <span id="showing-count">0</span> of <span id="total-count">0</span> results</div>
+                        <div id="pagination-container" class="d-none">
+                            <button id="prev-page-btn" class="btn btn-sm btn-outline-secondary me-2" disabled>
+                                <i data-feather="chevron-left"></i> Previous
+                            </button>
+                            <span id="pagination-info">Page <span id="current-page">1</span> of <span id="total-pages">1</span></span>
+                            <button id="next-page-btn" class="btn btn-sm btn-outline-secondary ms-2" disabled>
+                                Next <i data-feather="chevron-right"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Get results from session storage
+        let resultsData = null;
+        let filteredResults = null;
+        let currentPage = 1;
+        const pageSize = 25;
+        let allFields = false;
+        
+        try {
+            const huntResults = sessionStorage.getItem('huntResults');
+            if (huntResults) {
+                resultsData = JSON.parse(huntResults);
+                sessionStorage.removeItem('huntResults');
+            } else {
+                const queryResults = sessionStorage.getItem('queryResults');
+                if (queryResults) {
+                    resultsData = JSON.parse(queryResults);
+                    sessionStorage.removeItem('queryResults');
+                }
+            }
+        } catch (error) {
+            console.error('Error parsing results:', error);
+        }
+        
+        // Initialize feather icons
+        feather.replace();
+        
+        // Set up back button
+        document.getElementById('back-btn').addEventListener('click', function() {
+            window.history.back();
+        });
+        
+        // Set up pagination
+        document.getElementById('prev-page-btn').addEventListener('click', function() {
+            if (currentPage > 1) {
+                currentPage--;
+                displayResults();
+            }
+        });
+        
+        document.getElementById('next-page-btn').addEventListener('click', function() {
+            const totalPages = Math.ceil(filteredResults.length / pageSize);
+            if (currentPage < totalPages) {
+                currentPage++;
+                displayResults();
+            }
+        });
+        
+        // Set up show all fields toggle
+        document.getElementById('show-all-fields').addEventListener('change', function() {
+            allFields = this.checked;
+            displayResults();
+        });
+        
+        // Set up filter
+        document.getElementById('apply-filter-btn').addEventListener('click', applyFilter);
+        document.getElementById('filter-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                applyFilter();
+            }
+        });
+        
+        // Set up export CSV button
+        document.getElementById('export-csv-btn').addEventListener('click', exportToCsv);
+        
+        // If we have results, display them
+        if (resultsData) {
+            if (resultsData.status === 'error') {
+                showError(resultsData.error, resultsData.query);
+            } else if (resultsData.status === 'timeout') {
+                showError('Query timed out', resultsData.query);
+            } else if (Array.isArray(resultsData.results) && resultsData.results.length === 0) {
+                showNoResults();
+            } else if (resultsData.technique) {
+                // This is a hunt result
+                showHuntResults(resultsData);
+            } else {
+                // This is a standard query result
+                showQueryResults(resultsData);
+            }
+        } else {
+            showError('No results found in session', '');
+        }
+        
+        // Function to show error
+        function showError(message, details) {
+            document.getElementById('results-loading').classList.add('d-none');
+            document.getElementById('error-container').classList.remove('d-none');
+            document.getElementById('error-message').textContent = message;
+            document.getElementById('error-details').textContent = details || '';
+        }
+        
+        // Function to show no results
+        function showNoResults() {
+            document.getElementById('results-loading').classList.add('d-none');
+            document.getElementById('no-results-container').classList.remove('d-none');
+        }
+        
+        // Function to show hunt results
+        function showHuntResults(data) {
+            document.getElementById('results-title').textContent = `Hunt Results: ${data.technique.name} (${data.technique.id})`;
+            
+            // Flatten results from multiple rules
+            let allResults = [];
+            let totalResultCount = 0;
+            
+            data.results.forEach(ruleResult => {
+                if (ruleResult.status === 'success' && ruleResult.results.length > 0) {
+                    // Add rule ID and title to each result
+                    ruleResult.results.forEach(result => {
+                        result._rule_id = ruleResult.rule_id;
+                        result._rule_title = ruleResult.rule_title;
+                    });
+                    
+                    allResults = allResults.concat(ruleResult.results);
+                    totalResultCount += ruleResult.total_result_count || ruleResult.results.length;
+                }
+            });
+            
+            // Create a synthetic result object
+            const combinedResult = {
+                status: 'success',
+                message: `Hunt completed with ${data.results.length} rules`,
+                query: `Hunt for technique ${data.technique.id}`,
+                results: allResults,
+                result_count: allResults.length,
+                total_result_count: totalResultCount,
+                execution_time: data.results.reduce((sum, r) => sum + (r.execution_time || 0), 0),
+                hunt: true,
+                technique: data.technique,
+                rule_count: data.rule_count
+            };
+            
+            showQueryResults(combinedResult);
+        }
+        
+        // Function to show query results
+        function showQueryResults(data) {
+            // Enable export button
+            document.getElementById('export-csv-btn').disabled = false;
+            
+            // Store filtered results
+            filteredResults = data.results;
+            
+            // Display query information
+            document.getElementById('query-text').textContent = data.query;
+            
+            // Display stats
+            const statsList = document.getElementById('query-stats');
+            statsList.innerHTML = '';
+            
+            const statsItems = [
+                { label: 'Total Results', value: data.total_result_count || data.result_count },
+                { label: 'Execution Time', value: `${data.execution_time.toFixed(2)} seconds` }
+            ];
+            
+            if (data.scan_count) {
+                statsItems.push({ label: 'Scanned Events', value: data.scan_count.toLocaleString() });
+            }
+            
+            if (data.event_count) {
+                statsItems.push({ label: 'Matched Events', value: data.event_count.toLocaleString() });
+            }
+            
+            if (data.hunt) {
+                statsItems.push({ label: 'Rules Executed', value: data.rule_count });
+            }
+            
+            statsItems.forEach(item => {
+                const li = document.createElement('li');
+                li.className = 'list-group-item d-flex justify-content-between align-items-center';
+                li.innerHTML = `
+                    <span>${item.label}</span>
+                    <span class="badge bg-primary rounded-pill">${item.value}</span>
+                `;
+                statsList.appendChild(li);
+            });
+            
+            // Display rule info if available
+            if (data.rule) {
+                const ruleInfo = document.getElementById('rule-info');
+                ruleInfo.innerHTML = `
+                    <div class="mb-2">
+                        <strong>${data.rule.title}</strong>
+                    </div>
+                    <div>
+                        <code>${data.rule.id}</code>
+                    </div>
+                    <div class="mt-2">
+                        ${data.rule.description || ''}
+                    </div>
+                `;
+                document.getElementById('rule-info-container').classList.remove('d-none');
+            }
+            
+            // Display results
+            displayResults();
+            
+            // Show results container
+            document.getElementById('results-loading').classList.add('d-none');
+            document.getElementById('results-container').classList.remove('d-none');
+        }
+        
+        // Function to display results with pagination
+        function displayResults() {
+            if (!filteredResults || filteredResults.length === 0) {
+                document.getElementById('results-table').classList.add('d-none');
+                document.getElementById('no-results-container').classList.remove('d-none');
+                return;
+            }
+            
+            document.getElementById('results-table').classList.remove('d-none');
+            document.getElementById('no-results-container').classList.add('d-none');
+            
+            // Update pagination
+            const totalPages = Math.ceil(filteredResults.length / pageSize);
+            document.getElementById('current-page').textContent = currentPage;
+            document.getElementById('total-pages').textContent = totalPages;
+            document.getElementById('prev-page-btn').disabled = currentPage === 1;
+            document.getElementById('next-page-btn').disabled = currentPage === totalPages;
+            
+            if (totalPages > 1) {
+                document.getElementById('pagination-container').classList.remove('d-none');
+            } else {
+                document.getElementById('pagination-container').classList.add('d-none');
+            }
+            
+            // Update results count
+            document.getElementById('showing-count').textContent = Math.min(filteredResults.length, pageSize);
+            document.getElementById('total-count').textContent = filteredResults.length;
+            
+            // Determine fields to display
+            let fieldsToDisplay = [];
+            
+            if (allFields) {
+                // Get all fields from all results
+                const fieldSet = new Set();
+                filteredResults.forEach(result => {
+                    Object.keys(result).forEach(key => {
+                        fieldSet.add(key);
+                    });
+                });
+                fieldsToDisplay = Array.from(fieldSet);
+            } else {
+                // Get common fields or important fields
+                const firstResult = filteredResults[0];
+                const importantFields = ['_time', 'host', 'source', 'sourcetype', 'index', 'eventtype', 
+                                        'Image', 'CommandLine', 'User', 'src_ip', 'dest_ip', 'TargetFilename'];
+                
+                // Start with important fields that exist in the data
+                const fields = importantFields.filter(field => field in firstResult);
+                
+                // Add other fields up to a limit
+                const maxFields = 10;
+                const otherFields = Object.keys(firstResult)
+                    .filter(field => !fields.includes(field) && !field.startsWith('_'))
+                    .slice(0, maxFields - fields.length);
+                
+                fieldsToDisplay = [...fields, ...otherFields];
+                
+                // Always add _rule_title if it exists
+                if ('_rule_title' in firstResult && !fieldsToDisplay.includes('_rule_title')) {
+                    fieldsToDisplay.unshift('_rule_title');
+                }
+            }
+            
+            // Generate header
+            const header = document.getElementById('results-header');
+            header.innerHTML = '';
+            
+            fieldsToDisplay.forEach(field => {
+                const th = document.createElement('th');
+                th.textContent = field;
+                header.appendChild(th);
+            });
+            
+            // Generate rows
+            const tbody = document.getElementById('results-body');
+            tbody.innerHTML = '';
+            
+            // Get current page results
+            const startIndex = (currentPage - 1) * pageSize;
+            const endIndex = Math.min(startIndex + pageSize, filteredResults.length);
+            const pageResults = filteredResults.slice(startIndex, endIndex);
+            
+            pageResults.forEach(result => {
+                const tr = document.createElement('tr');
+                
+                fieldsToDisplay.forEach(field => {
+                    const td = document.createElement('td');
+                    
+                    if (field in result) {
+                        const value = result[field];
+                        
+                        if (field === '_rule_title') {
+                            td.innerHTML = `<span class="badge bg-info">${value}</span>`;
+                        } else if (typeof value === 'object') {
+                            td.textContent = JSON.stringify(value);
+                        } else {
+                            td.textContent = value;
+                        }
+                    } else {
+                        td.innerHTML = '<span class="text-muted">-</span>';
+                    }
+                    
+                    tr.appendChild(td);
+                });
+                
+                tbody.appendChild(tr);
+            });
+            
+            // Initialize feather icons
+            feather.replace();
+        }
+        
+        // Function to apply filter
+        function applyFilter() {
+            const filterText = document.getElementById('filter-input').value.trim().toLowerCase();
+            
+            if (!filterText) {
+                // Reset filters
+                filteredResults = resultsData.results;
+                document.getElementById('active-filters').innerHTML = '';
+            } else {
+                // Apply filter
+                filteredResults = resultsData.results.filter(result => {
+                    // Search in all fields
+                    for (const [key, value] of Object.entries(result)) {
+                        if (String(value).toLowerCase().includes(filterText)) {
+                            return true;
+                        }
+                    }
+                    return false;
+                });
+                
+                // Show active filter
+                const activeFilters = document.getElementById('active-filters');
+                activeFilters.innerHTML = `
+                    <div class="badge bg-primary d-inline-flex align-items-center me-2 mb-2">
+                        <span class="me-1">${filterText}</span>
+                        <button type="button" class="btn-close btn-close-white clear-filter-btn" aria-label="Close"></button>
+                    </div>
+                `;
+                
+                // Add event listener to clear filter
+                document.querySelectorAll('.clear-filter-btn').forEach(button => {
+                    button.addEventListener('click', function() {
+                        document.getElementById('filter-input').value = '';
+                        filteredResults = resultsData.results;
+                        document.getElementById('active-filters').innerHTML = '';
+                        currentPage = 1;
+                        displayResults();
+                    });
+                });
+            }
+            
+            // Reset to first page and display results
+            currentPage = 1;
+            displayResults();
+        }
+        
+        // Function to export results to CSV
+        function exportToCsv() {
+            if (!filteredResults || filteredResults.length === 0) {
+                return;
+            }
+            
+            // Get all fields from all results
+            const fieldSet = new Set();
+            filteredResults.forEach(result => {
+                Object.keys(result).forEach(key => {
+                    fieldSet.add(key);
+                });
+            });
+            const fields = Array.from(fieldSet);
+            
+            // Create CSV content
+            let csvContent = fields.join(',') + '\n';
+            
+            filteredResults.forEach(result => {
+                const row = fields.map(field => {
+                    const value = result[field];
+                    
+                    if (value === undefined || value === null) {
+                        return '';
+                    } else if (typeof value === 'object') {
+                        return '"' + JSON.stringify(value).replace(/"/g, '""') + '"';
+                    } else {
+                        return '"' + String(value).replace(/"/g, '""') + '"';
+                    }
+                });
+                
+                csvContent += row.join(',') + '\n';
+            });
+            
+            // Create download link
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', 'query_results.csv');
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,35 @@
+{
+  "process": {
+    "process_name": "Image",
+    "process_id": "ProcessId",
+    "command_line": "CommandLine",
+    "parent_process_name": "ParentImage",
+    "parent_process_id": "ParentProcessId",
+    "parent_command_line": "ParentCommandLine",
+    "current_directory": "CurrentDirectory",
+    "user": "User"
+  },
+  "network": {
+    "source_ip": "src_ip",
+    "destination_ip": "dest_ip",
+    "source_port": "src_port",
+    "destination_port": "dest_port",
+    "protocol": "protocol"
+  },
+  "file": {
+    "file_path": "TargetFilename",
+    "file_name": "TargetFilename",
+    "file_extension": "TargetExtension"
+  },
+  "registry": {
+    "registry_key": "TargetObject",
+    "registry_value": "Details",
+    "registry_details": "Details"
+  },
+  "authentication": {
+    "user_name": "user",
+    "domain": "domain",
+    "logon_type": "logon_type",
+    "status": "status"
+  }
+}

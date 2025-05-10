@@ -1,0 +1,439 @@
+{% extends "layout.html" %}
+
+{% block title %}Sigma Rules{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h1>{{ title }}</h1>
+        <p class="lead">View and execute Sigma detection rules.</p>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i data-feather="file-text" class="me-2"></i> Rules
+                    </h5>
+                    <div class="d-flex">
+                        <form class="d-flex me-2" action="{{ url_for('sigma_rules') }}" method="get">
+                            <input type="text" class="form-control me-2" name="search" placeholder="Search rules...">
+                            <button class="btn btn-outline-primary" type="submit">
+                                <i data-feather="search"></i>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                {% if rules %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Title</th>
+                                <th>Level</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for rule in rules %}
+                            <tr>
+                                <td><code>{{ rule.id }}</code></td>
+                                <td>{{ rule.title }}</td>
+                                <td>
+                                    {% if rule.level == 'high' %}
+                                    <span class="badge bg-danger">High</span>
+                                    {% elif rule.level == 'medium' %}
+                                    <span class="badge bg-warning text-dark">Medium</span>
+                                    {% elif rule.level == 'low' %}
+                                    <span class="badge bg-info">Low</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">{{ rule.level|default('Unknown') }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-info view-rule-btn" data-rule-id="{{ rule.id }}">
+                                        <i data-feather="eye" class="icon-small"></i> View
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-success run-rule-btn" data-rule-id="{{ rule.id }}" {% if not splunk_connected %}disabled{% endif %}>
+                                        <i data-feather="play" class="icon-small"></i> Run
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-info m-3">
+                    No rules found. Make sure you have Sigma rules in your rules directory.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Rule Details Modal -->
+<div class="modal fade" id="ruleModal" tabindex="-1" aria-labelledby="ruleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="ruleModalLabel">Rule Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="rule-loading" class="text-center">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p>Loading rule details...</p>
+                </div>
+                <div id="rule-details" class="d-none">
+                    <h4 id="rule-title"></h4>
+                    <div class="mb-3">
+                        <span class="badge bg-primary" id="rule-id"></span>
+                        <span class="badge bg-secondary" id="rule-level"></span>
+                        <span class="badge bg-info" id="rule-status"></span>
+                    </div>
+                    
+                    <div id="rule-description-container" class="mb-3">
+                        <h5>Description</h5>
+                        <p id="rule-description"></p>
+                    </div>
+                    
+                    <div id="rule-author-container" class="mb-3">
+                        <h5>Author</h5>
+                        <p id="rule-author"></p>
+                    </div>
+                    
+                    <div id="rule-tags-container" class="mb-3">
+                        <h5>Tags</h5>
+                        <div id="rule-tags"></div>
+                    </div>
+                    
+                    <div id="rule-detection-container" class="mb-4">
+                        <h5>Detection</h5>
+                        <pre id="rule-detection" class="bg-dark text-light p-3 rounded"></pre>
+                    </div>
+                    
+                    <div id="rule-query-container">
+                        <h5>Splunk Query</h5>
+                        <pre id="rule-query" class="bg-dark text-light p-3 rounded"></pre>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-success" id="run-rule-modal-btn" {% if not splunk_connected %}disabled{% endif %}>
+                    Run in Splunk
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Run Rule Modal -->
+<div class="modal fade" id="runRuleModal" tabindex="-1" aria-labelledby="runRuleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="runRuleModalLabel">Run Rule</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="run-rule-form">
+                    <div class="mb-3">
+                        <h5 id="run-rule-title"></h5>
+                        <code id="run-rule-id"></code>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="run-rule-query" class="form-label">Splunk Query</label>
+                        <pre id="run-rule-query" class="bg-dark text-light p-3 rounded"></pre>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Time Range</label>
+                        <div class="row">
+                            <div class="col">
+                                <input type="text" class="form-control" id="run-rule-earliest" placeholder="Earliest time" value="-24h">
+                                <small class="form-text text-muted">e.g., -24h, -7d, 2023-01-01T00:00:00</small>
+                            </div>
+                            <div class="col">
+                                <input type="text" class="form-control" id="run-rule-latest" placeholder="Latest time" value="now">
+                                <small class="form-text text-muted">e.g., now, +1h, 2023-01-02T00:00:00</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="run-rule-count" class="form-label">Maximum Results</label>
+                        <input type="number" class="form-control" id="run-rule-count" value="100" min="1" max="10000">
+                    </div>
+                </div>
+                
+                <div id="run-rule-status" class="alert alert-info d-none">
+                    <div class="d-flex align-items-center">
+                        <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                        <span>Executing query...</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="execute-rule-btn">Execute</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const ruleModal = new bootstrap.Modal(document.getElementById('ruleModal'));
+        const runRuleModal = new bootstrap.Modal(document.getElementById('runRuleModal'));
+        
+        let currentRuleId = null;
+        
+        // View rule button click
+        document.querySelectorAll('.view-rule-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const ruleId = this.getAttribute('data-rule-id');
+                viewRuleDetails(ruleId);
+            });
+        });
+        
+        // Run rule button click
+        document.querySelectorAll('.run-rule-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const ruleId = this.getAttribute('data-rule-id');
+                prepareRunRule(ruleId);
+            });
+        });
+        
+        // Run rule from modal
+        document.getElementById('run-rule-modal-btn').addEventListener('click', function() {
+            if (currentRuleId) {
+                ruleModal.hide();
+                prepareRunRule(currentRuleId);
+            }
+        });
+        
+        // Execute rule button click
+        document.getElementById('execute-rule-btn').addEventListener('click', function() {
+            if (currentRuleId) {
+                executeRule();
+            }
+        });
+        
+        // Function to view rule details
+        function viewRuleDetails(ruleId) {
+            // Reset modal
+            document.getElementById('rule-loading').classList.remove('d-none');
+            document.getElementById('rule-details').classList.add('d-none');
+            
+            // Show modal
+            ruleModal.show();
+            
+            // Store current rule ID
+            currentRuleId = ruleId;
+            
+            // Fetch rule details
+            fetch(`/sigma/rule/${ruleId}`)
+                .then(response => response.json())
+                .then(rule => {
+                    // Set rule details
+                    document.getElementById('ruleModalLabel').textContent = rule.title || 'Rule Details';
+                    document.getElementById('rule-title').textContent = rule.title || 'Untitled Rule';
+                    document.getElementById('rule-id').textContent = rule.id;
+                    
+                    // Set level badge
+                    const levelBadge = document.getElementById('rule-level');
+                    if (rule.level) {
+                        levelBadge.textContent = rule.level.charAt(0).toUpperCase() + rule.level.slice(1);
+                        
+                        if (rule.level === 'high') {
+                            levelBadge.className = 'badge bg-danger';
+                        } else if (rule.level === 'medium') {
+                            levelBadge.className = 'badge bg-warning text-dark';
+                        } else if (rule.level === 'low') {
+                            levelBadge.className = 'badge bg-info';
+                        } else {
+                            levelBadge.className = 'badge bg-secondary';
+                        }
+                    } else {
+                        levelBadge.textContent = 'Unknown';
+                        levelBadge.className = 'badge bg-secondary';
+                    }
+                    
+                    // Set status badge
+                    const statusBadge = document.getElementById('rule-status');
+                    if (rule.status) {
+                        statusBadge.textContent = rule.status;
+                        statusBadge.className = 'badge bg-info';
+                    } else {
+                        statusBadge.textContent = 'Unknown';
+                        statusBadge.className = 'badge bg-secondary';
+                    }
+                    
+                    // Set description
+                    if (rule.description) {
+                        document.getElementById('rule-description').textContent = rule.description;
+                        document.getElementById('rule-description-container').classList.remove('d-none');
+                    } else {
+                        document.getElementById('rule-description-container').classList.add('d-none');
+                    }
+                    
+                    // Set author
+                    if (rule.author) {
+                        document.getElementById('rule-author').textContent = Array.isArray(rule.author) ? 
+                            rule.author.join(', ') : rule.author;
+                        document.getElementById('rule-author-container').classList.remove('d-none');
+                    } else {
+                        document.getElementById('rule-author-container').classList.add('d-none');
+                    }
+                    
+                    // Set tags
+                    const tagsContainer = document.getElementById('rule-tags');
+                    if (rule.tags && (Array.isArray(rule.tags) ? rule.tags.length > 0 : rule.tags)) {
+                        const tags = Array.isArray(rule.tags) ? rule.tags : [rule.tags];
+                        
+                        tagsContainer.innerHTML = '';
+                        tags.forEach(tag => {
+                            const badge = document.createElement('span');
+                            badge.className = 'badge bg-secondary me-1 mb-1';
+                            badge.textContent = tag;
+                            tagsContainer.appendChild(badge);
+                        });
+                        
+                        document.getElementById('rule-tags-container').classList.remove('d-none');
+                    } else {
+                        document.getElementById('rule-tags-container').classList.add('d-none');
+                    }
+                    
+                    // Set detection
+                    if (rule.detection) {
+                        document.getElementById('rule-detection').textContent = 
+                            JSON.stringify(rule.detection, null, 2);
+                        document.getElementById('rule-detection-container').classList.remove('d-none');
+                    } else {
+                        document.getElementById('rule-detection-container').classList.add('d-none');
+                    }
+                    
+                    // Set Splunk query
+                    if (rule.splunk_query) {
+                        document.getElementById('rule-query').textContent = rule.splunk_query;
+                        document.getElementById('rule-query-container').classList.remove('d-none');
+                    } else {
+                        document.getElementById('rule-query').textContent = 'Failed to convert rule to Splunk query';
+                        document.getElementById('rule-query-container').classList.remove('d-none');
+                    }
+                    
+                    // Show details
+                    document.getElementById('rule-loading').classList.add('d-none');
+                    document.getElementById('rule-details').classList.remove('d-none');
+                })
+                .catch(error => {
+                    console.error('Error loading rule details:', error);
+                    document.getElementById('rule-loading').classList.add('d-none');
+                    document.getElementById('rule-details').innerHTML = `
+                        <div class="alert alert-danger">
+                            Failed to load rule details. Please try again.
+                        </div>
+                    `;
+                });
+        }
+        
+        // Function to prepare running a rule
+        function prepareRunRule(ruleId) {
+            // Reset modal
+            document.getElementById('run-rule-status').classList.add('d-none');
+            document.getElementById('run-rule-form').classList.remove('d-none');
+            document.getElementById('execute-rule-btn').disabled = false;
+            
+            // Store current rule ID
+            currentRuleId = ruleId;
+            
+            // Fetch rule details
+            fetch(`/sigma/rule/${ruleId}`)
+                .then(response => response.json())
+                .then(rule => {
+                    // Set rule details
+                    document.getElementById('runRuleModalLabel').textContent = 'Run Rule: ' + (rule.title || 'Untitled Rule');
+                    document.getElementById('run-rule-title').textContent = rule.title || 'Untitled Rule';
+                    document.getElementById('run-rule-id').textContent = rule.id;
+                    
+                    // Set Splunk query
+                    if (rule.splunk_query) {
+                        document.getElementById('run-rule-query').textContent = rule.splunk_query;
+                    } else {
+                        document.getElementById('run-rule-query').textContent = 'Failed to convert rule to Splunk query';
+                        document.getElementById('execute-rule-btn').disabled = true;
+                    }
+                    
+                    // Show modal
+                    runRuleModal.show();
+                })
+                .catch(error => {
+                    console.error('Error loading rule details:', error);
+                    alert('Failed to load rule details. Please try again.');
+                });
+        }
+        
+        // Function to execute a rule
+        function executeRule() {
+            // Show status
+            document.getElementById('run-rule-status').classList.remove('d-none');
+            document.getElementById('run-rule-form').classList.add('d-none');
+            document.getElementById('execute-rule-btn').disabled = true;
+            
+            // Get parameters
+            const earliest = document.getElementById('run-rule-earliest').value;
+            const latest = document.getElementById('run-rule-latest').value;
+            const count = document.getElementById('run-rule-count').value;
+            
+            // Execute rule
+            fetch(`/splunk/rule/${currentRuleId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    earliest: earliest,
+                    latest: latest,
+                    count: parseInt(count)
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Hide status
+                document.getElementById('run-rule-status').classList.add('d-none');
+                document.getElementById('execute-rule-btn').disabled = false;
+                
+                // Store results in session storage
+                sessionStorage.setItem('queryResults', JSON.stringify(data));
+                
+                // Close modal
+                runRuleModal.hide();
+                
+                // Redirect to results page
+                window.location.href = '/results';
+            })
+            .catch(error => {
+                console.error('Error executing rule:', error);
+                document.getElementById('run-rule-status').classList.add('d-none');
+                document.getElementById('execute-rule-btn').disabled = false;
+                document.getElementById('run-rule-form').classList.remove('d-none');
+                alert('Failed to execute rule. Please try again.');
+            });
+        }
+    });
+</script>
+{% endblock %}

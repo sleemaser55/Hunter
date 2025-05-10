@@ -1,0 +1,237 @@
+{% extends "layout.html" %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12 text-center">
+        <h1 class="display-4">Security Hunter</h1>
+        <p class="lead">Threat hunting with MITRE ATT&CK, Sigma rules, and Splunk</p>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i data-feather="target" class="me-2"></i> MITRE ATT&CK
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">Browse the MITRE ATT&CK framework to find tactics and techniques related to your hunt.</p>
+                <a href="{{ url_for('mitre_browser') }}" class="btn btn-primary">Browse Framework</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i data-feather="file-text" class="me-2"></i> Sigma Rules
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">Explore Sigma detection rules and convert them to Splunk queries for execution.</p>
+                <a href="{{ url_for('sigma_rules') }}" class="btn btn-primary">Browse Rules</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i data-feather="search" class="me-2"></i> Quick Hunt
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">Execute a quick hunt by selecting a MITRE technique and running associated Sigma rules.</p>
+                <button id="quick-hunt-btn" class="btn btn-primary" {% if not splunk_connected %}disabled{% endif %}>Start Quick Hunt</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i data-feather="terminal" class="me-2"></i> CLI Mode
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">Security Hunter also includes a powerful command-line interface. Here are some example commands:</p>
+                <div class="bg-dark p-3 rounded">
+                    <code class="text-light">
+                        # List all MITRE tactics<br>
+                        python cli.py mitre tactics<br><br>
+                        
+                        # List techniques for a specific tactic<br>
+                        python cli.py mitre techniques --tactic TA0004<br><br>
+                        
+                        # Show details for a technique<br>
+                        python cli.py mitre technique T1059.001<br><br>
+                        
+                        # List Sigma rules for a technique<br>
+                        python cli.py sigma list --technique T1059.001<br><br>
+                        
+                        # Execute a Sigma rule against Splunk<br>
+                        python cli.py splunk rule 5d2885ba-56bc-11ec-9b97-4c4d5c00a912<br><br>
+                        
+                        # Execute a hunt for a MITRE technique<br>
+                        python cli.py hunt T1059.001 --earliest -7d
+                    </code>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Hunt Modal -->
+<div class="modal fade" id="quickHuntModal" tabindex="-1" aria-labelledby="quickHuntModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="quickHuntModalLabel">Quick Hunt</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="quickHuntForm">
+                    <div class="mb-3">
+                        <label for="technique-select" class="form-label">Select Technique</label>
+                        <select class="form-select" id="technique-select" required>
+                            <option value="" selected disabled>Loading techniques...</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Time Range</label>
+                        <div class="row">
+                            <div class="col">
+                                <input type="text" class="form-control" id="hunt-earliest" placeholder="Earliest time" value="-24h">
+                                <small class="form-text text-muted">e.g., -24h, -7d, 2023-01-01T00:00:00</small>
+                            </div>
+                            <div class="col">
+                                <input type="text" class="form-control" id="hunt-latest" placeholder="Latest time" value="now">
+                                <small class="form-text text-muted">e.g., now, +1h, 2023-01-02T00:00:00</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="hunt-count" class="form-label">Maximum Results</label>
+                        <input type="number" class="form-control" id="hunt-count" value="100" min="1" max="10000">
+                    </div>
+                </form>
+                <div id="hunt-status" class="alert alert-info d-none">
+                    <div class="d-flex align-items-center">
+                        <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                        <span>Executing hunt...</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="start-hunt-btn">Start Hunt</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const quickHuntBtn = document.getElementById('quick-hunt-btn');
+        const startHuntBtn = document.getElementById('start-hunt-btn');
+        const techniqueSelect = document.getElementById('technique-select');
+        const huntStatus = document.getElementById('hunt-status');
+        
+        // Initialize Quick Hunt modal
+        const quickHuntModal = new bootstrap.Modal(document.getElementById('quickHuntModal'));
+        
+        // Load techniques when Quick Hunt button is clicked
+        quickHuntBtn.addEventListener('click', function() {
+            // Clear previous status
+            huntStatus.classList.add('d-none');
+            
+            // Load techniques
+            fetch('/mitre/techniques')
+                .then(response => response.json())
+                .then(techniques => {
+                    // Sort techniques by ID
+                    techniques.sort((a, b) => a.id.localeCompare(b.id));
+                    
+                    // Clear select and add options
+                    techniqueSelect.innerHTML = '';
+                    techniqueSelect.innerHTML = '<option value="" selected disabled>Select a technique...</option>';
+                    
+                    techniques.forEach(technique => {
+                        const option = document.createElement('option');
+                        option.value = technique.id;
+                        option.textContent = `${technique.id} - ${technique.name}`;
+                        techniqueSelect.appendChild(option);
+                    });
+                    
+                    // Show modal
+                    quickHuntModal.show();
+                })
+                .catch(error => {
+                    console.error('Error loading techniques:', error);
+                    alert('Failed to load techniques. Please try again.');
+                });
+        });
+        
+        // Start hunt when button is clicked
+        startHuntBtn.addEventListener('click', function() {
+            const techniqueId = techniqueSelect.value;
+            const earliest = document.getElementById('hunt-earliest').value;
+            const latest = document.getElementById('hunt-latest').value;
+            const count = document.getElementById('hunt-count').value;
+            
+            if (!techniqueId) {
+                alert('Please select a technique');
+                return;
+            }
+            
+            // Show status
+            huntStatus.classList.remove('d-none');
+            startHuntBtn.disabled = true;
+            
+            // Execute hunt
+            fetch('/hunt', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    technique_id: techniqueId,
+                    earliest: earliest,
+                    latest: latest,
+                    count: parseInt(count)
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Hide status
+                huntStatus.classList.add('d-none');
+                startHuntBtn.disabled = false;
+                
+                // Close modal
+                quickHuntModal.hide();
+                
+                // Store results in session storage
+                sessionStorage.setItem('huntResults', JSON.stringify(data));
+                
+                // Redirect to results page
+                window.location.href = '/results';
+            })
+            .catch(error => {
+                console.error('Error executing hunt:', error);
+                huntStatus.classList.add('d-none');
+                startHuntBtn.disabled = false;
+                alert('Failed to execute hunt. Please try again.');
+            });
+        });
+    });
+</script>
+{% endblock %}

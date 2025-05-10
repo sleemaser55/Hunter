@@ -1,0 +1,393 @@
+{% extends "layout.html" %}
+
+{% block title %}MITRE ATT&CK Browser{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h1>MITRE ATT&CK Browser</h1>
+        <p class="lead">Browse the MITRE ATT&CK framework to find tactics and techniques for threat hunting.</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i data-feather="grid" class="me-2"></i> Tactics
+                </h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="list-group list-group-flush" id="tactics-list">
+                    {% for tactic in tactics %}
+                    <button class="list-group-item list-group-item-action tactic-item d-flex justify-content-between align-items-center" 
+                            data-tactic-id="{{ tactic.id }}"
+                            data-tactic-name="{{ tactic.name }}">
+                        <div>
+                            <strong>{{ tactic.id }}</strong> - {{ tactic.name }}
+                        </div>
+                        <span class="badge bg-secondary rounded-pill"></span>
+                    </button>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0" id="techniques-header">
+                    <i data-feather="list" class="me-2"></i> Techniques
+                </h5>
+                <div class="input-group mt-2">
+                    <input type="text" class="form-control" id="technique-search" placeholder="Search techniques...">
+                    <button class="btn btn-outline-secondary" type="button" id="technique-search-btn">
+                        <i data-feather="search"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="list-group list-group-flush" id="techniques-list">
+                    <div class="text-center py-4">
+                        <p>Select a tactic to view techniques</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Technique Details Modal -->
+<div class="modal fade" id="techniqueModal" tabindex="-1" aria-labelledby="techniqueModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="techniqueModalLabel">Technique Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="technique-loading" class="text-center">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p>Loading technique details...</p>
+                </div>
+                <div id="technique-details" class="d-none">
+                    <h4 id="technique-name"></h4>
+                    <div class="mb-3">
+                        <span class="badge bg-primary" id="technique-id"></span>
+                        <span class="badge bg-secondary" id="technique-is-subtechnique"></span>
+                    </div>
+                    <h5>Description</h5>
+                    <p id="technique-description" class="mb-3"></p>
+                    
+                    <div id="technique-detection-container" class="mb-3">
+                        <h5>Detection</h5>
+                        <p id="technique-detection"></p>
+                    </div>
+                    
+                    <h5>Tactics</h5>
+                    <p id="technique-tactics" class="mb-3"></p>
+                    
+                    <div id="technique-parent-container" class="mb-3">
+                        <h5>Parent Technique</h5>
+                        <p id="technique-parent"></p>
+                    </div>
+                    
+                    <div id="sigma-rules-container" class="mt-4">
+                        <h5>Associated Sigma Rules</h5>
+                        <div id="sigma-rules-list"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <a id="technique-url" href="#" target="_blank" class="btn btn-primary">View on MITRE ATT&CK</a>
+                <a id="technique-hunt-btn" href="#" class="btn btn-success" {% if not splunk_connected %}disabled{% endif %}>
+                    Hunt with this Technique
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const tacticsList = document.getElementById('tactics-list');
+        const techniquesList = document.getElementById('techniques-list');
+        const techniquesHeader = document.getElementById('techniques-header');
+        const techniqueModal = new bootstrap.Modal(document.getElementById('techniqueModal'));
+        const techniqueSearch = document.getElementById('technique-search');
+        const techniqueSearchBtn = document.getElementById('technique-search-btn');
+        
+        let activeTactic = null;
+        let allTechniques = [];
+        
+        // Function to load techniques
+        function loadTechniques(tacticId = null) {
+            // Show loading
+            techniquesList.innerHTML = `
+                <div class="text-center py-4">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p>Loading techniques...</p>
+                </div>
+            `;
+            
+            // Update header
+            if (tacticId) {
+                const tacticName = document.querySelector(`[data-tactic-id="${tacticId}"]`).getAttribute('data-tactic-name');
+                techniquesHeader.innerHTML = `<i data-feather="list" class="me-2"></i> Techniques for ${tacticName}`;
+            } else {
+                techniquesHeader.innerHTML = `<i data-feather="list" class="me-2"></i> All Techniques`;
+            }
+            
+            // Load techniques
+            const url = tacticId ? `/mitre/techniques?tactic=${tacticId}` : '/mitre/techniques';
+            fetch(url)
+                .then(response => response.json())
+                .then(techniques => {
+                    // Store all techniques
+                    allTechniques = techniques;
+                    
+                    // Display techniques
+                    displayTechniques(techniques);
+                })
+                .catch(error => {
+                    console.error('Error loading techniques:', error);
+                    techniquesList.innerHTML = `
+                        <div class="text-center py-4">
+                            <div class="alert alert-danger">
+                                Failed to load techniques. Please try again.
+                            </div>
+                        </div>
+                    `;
+                });
+        }
+        
+        // Function to display techniques
+        function displayTechniques(techniques) {
+            if (techniques.length === 0) {
+                techniquesList.innerHTML = `
+                    <div class="text-center py-4">
+                        <p>No techniques found</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Sort techniques by ID
+            techniques.sort((a, b) => a.id.localeCompare(b.id));
+            
+            // Generate HTML
+            techniquesList.innerHTML = '';
+            techniques.forEach(technique => {
+                const item = document.createElement('button');
+                item.className = 'list-group-item list-group-item-action technique-item';
+                item.setAttribute('data-technique-id', technique.id);
+                
+                const isSubtechnique = technique.is_subtechnique ? 
+                    '<span class="badge bg-secondary ms-1">Sub-technique</span>' : '';
+                
+                item.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>${technique.id}</strong> - ${technique.name} ${isSubtechnique}
+                        </div>
+                        <button class="btn btn-sm btn-outline-primary view-technique-btn">
+                            <i data-feather="info"></i>
+                        </button>
+                    </div>
+                `;
+                
+                techniquesList.appendChild(item);
+            });
+            
+            // Initialize feather icons
+            feather.replace();
+            
+            // Add event listeners
+            document.querySelectorAll('.technique-item').forEach(item => {
+                item.addEventListener('click', function(e) {
+                    if (e.target.closest('.view-technique-btn')) {
+                        // If the info button was clicked, show technique details
+                        showTechniqueDetails(this.getAttribute('data-technique-id'));
+                    }
+                });
+            });
+        }
+        
+        // Function to show technique details
+        function showTechniqueDetails(techniqueId) {
+            // Reset modal
+            document.getElementById('technique-loading').classList.remove('d-none');
+            document.getElementById('technique-details').classList.add('d-none');
+            
+            // Set empty defaults
+            document.getElementById('techniqueModalLabel').textContent = `Technique ${techniqueId}`;
+            document.getElementById('technique-name').textContent = '';
+            document.getElementById('technique-id').textContent = '';
+            document.getElementById('technique-is-subtechnique').textContent = '';
+            document.getElementById('technique-description').textContent = '';
+            document.getElementById('technique-detection').textContent = '';
+            document.getElementById('technique-tactics').textContent = '';
+            document.getElementById('technique-parent').textContent = '';
+            document.getElementById('sigma-rules-list').innerHTML = '';
+            
+            // Show modal
+            techniqueModal.show();
+            
+            // Fetch technique details
+            fetch(`/mitre/technique/${techniqueId}`)
+                .then(response => response.json())
+                .then(technique => {
+                    // Set technique details
+                    document.getElementById('techniqueModalLabel').textContent = `${technique.name} (${technique.id})`;
+                    document.getElementById('technique-name').textContent = technique.name;
+                    document.getElementById('technique-id').textContent = technique.id;
+                    document.getElementById('technique-is-subtechnique').textContent = technique.is_subtechnique ? 'Sub-technique' : 'Technique';
+                    document.getElementById('technique-description').textContent = technique.description;
+                    
+                    // Set detection if available
+                    if (technique.detection) {
+                        document.getElementById('technique-detection').textContent = technique.detection;
+                        document.getElementById('technique-detection-container').classList.remove('d-none');
+                    } else {
+                        document.getElementById('technique-detection-container').classList.add('d-none');
+                    }
+                    
+                    // Set tactics
+                    document.getElementById('technique-tactics').textContent = technique.tactics.join(', ');
+                    
+                    // Set parent if applicable
+                    if (technique.is_subtechnique && technique.parent_id) {
+                        document.getElementById('technique-parent').textContent = technique.parent_id;
+                        document.getElementById('technique-parent-container').classList.remove('d-none');
+                    } else {
+                        document.getElementById('technique-parent-container').classList.add('d-none');
+                    }
+                    
+                    // Set external URL
+                    document.getElementById('technique-url').href = technique.url;
+                    
+                    // Set hunt button
+                    const huntBtn = document.getElementById('technique-hunt-btn');
+                    huntBtn.href = `/sigma?technique=${technique.id}`;
+                    
+                    // Set sigma rules
+                    const sigmaRulesList = document.getElementById('sigma-rules-list');
+                    if (technique.sigma_rules && technique.sigma_rules.length > 0) {
+                        sigmaRulesList.innerHTML = '';
+                        
+                        // Create list of rules
+                        const list = document.createElement('ul');
+                        list.className = 'list-group';
+                        
+                        technique.sigma_rules.forEach(rule => {
+                            const item = document.createElement('li');
+                            item.className = 'list-group-item d-flex justify-content-between align-items-center';
+                            
+                            item.innerHTML = `
+                                <div>
+                                    <strong>${rule.id}</strong>
+                                    <p class="mb-0">${rule.title || 'Untitled Rule'}</p>
+                                </div>
+                                <div>
+                                    <a href="/sigma?technique=${technique.id}" class="btn btn-sm btn-outline-primary">
+                                        View Rule
+                                    </a>
+                                </div>
+                            `;
+                            
+                            list.appendChild(item);
+                        });
+                        
+                        sigmaRulesList.appendChild(list);
+                    } else {
+                        sigmaRulesList.innerHTML = `
+                            <div class="alert alert-info">
+                                No Sigma rules found for this technique.
+                            </div>
+                        `;
+                    }
+                    
+                    // Show details
+                    document.getElementById('technique-loading').classList.add('d-none');
+                    document.getElementById('technique-details').classList.remove('d-none');
+                })
+                .catch(error => {
+                    console.error('Error loading technique details:', error);
+                    document.getElementById('technique-loading').classList.add('d-none');
+                    document.getElementById('technique-details').innerHTML = `
+                        <div class="alert alert-danger">
+                            Failed to load technique details. Please try again.
+                        </div>
+                    `;
+                });
+        }
+        
+        // Function to search techniques
+        function searchTechniques(query) {
+            if (!query) {
+                // If no query, show all techniques for the active tactic
+                loadTechniques(activeTactic);
+                return;
+            }
+            
+            query = query.toLowerCase();
+            
+            // Filter techniques
+            const filteredTechniques = allTechniques.filter(technique => {
+                return technique.id.toLowerCase().includes(query) ||
+                       technique.name.toLowerCase().includes(query) ||
+                       technique.description.toLowerCase().includes(query);
+            });
+            
+            // Update header
+            techniquesHeader.innerHTML = `<i data-feather="search" class="me-2"></i> Search Results: "${query}"`;
+            
+            // Display filtered techniques
+            displayTechniques(filteredTechniques);
+        }
+        
+        // Add event listeners to tactics
+        document.querySelectorAll('.tactic-item').forEach(item => {
+            item.addEventListener('click', function() {
+                // Update active state
+                document.querySelectorAll('.tactic-item').forEach(i => {
+                    i.classList.remove('active');
+                });
+                this.classList.add('active');
+                
+                // Store active tactic
+                activeTactic = this.getAttribute('data-tactic-id');
+                
+                // Clear search
+                techniqueSearch.value = '';
+                
+                // Load techniques for this tactic
+                loadTechniques(activeTactic);
+            });
+        });
+        
+        // Add event listener to search
+        techniqueSearchBtn.addEventListener('click', function() {
+            searchTechniques(techniqueSearch.value);
+        });
+        
+        techniqueSearch.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                searchTechniques(this.value);
+            }
+        });
+        
+        // Load all techniques on page load
+        loadTechniques();
+    });
+</script>
+{% endblock %}
