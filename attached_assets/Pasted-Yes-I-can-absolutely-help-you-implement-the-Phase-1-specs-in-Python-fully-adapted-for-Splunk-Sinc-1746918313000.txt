@@ -1,0 +1,142 @@
+Yes, I can absolutely help you implement the Phase 1 specs in Python, fully adapted for Splunk. Since you're using Splunk and already have the "Boss of the SOC v2" dataset loaded, you're in a great position to begin real query execution and testing.
+
+Here’s how we’ll proceed for Phase 1 with Splunk:
+
+
+---
+
+✅ Phase 1 Implementation for Splunk – Python Breakdown
+
+🔹 1. Tech Stack
+
+Backend: Python (FastAPI)
+
+Splunk Integration: splunk-sdk for Python
+
+Sigma Translation: pySigma + pySigma-backend-splunk
+
+Frontend: React (optional in Phase 1) or simple CLI for now
+
+Data: MITRE ATT&CK JSON + Sigma rules from SigmaHQ
+
+
+
+---
+
+🧩 Core Modules
+
+🧠 MITRE ATT&CK Browser (Tactic/Technique Selection)
+
+Load MITRE ATT&CK data from their CTI repo.
+
+Allow user to select:
+
+Tactic (e.g., Privilege Escalation)
+
+Technique (e.g., T1055 – Process Injection)
+
+
+
+📄 Sigma Rule Loader + Translator
+
+Load local Sigma rules (YAML).
+
+Use pySigma with the Splunk backend plugin to convert into SPL.
+
+pip install sigma pySigma-backend-splunk
+
+Example in Python:
+
+from sigma.parser import SigmaCollectionParser
+from sigma.backends.splunk import SplunkBackend
+
+rule = open('path/to/sigma_rule.yml').read()
+parser = SigmaCollectionParser(rule, "yaml")
+backend = SplunkBackend()
+spl_queries = backend.convert(parser.parse())
+
+
+🔌 Splunk Query Module
+
+Use splunk-sdk to authenticate and query Splunk:
+
+pip install splunk-sdk
+
+import splunklib.client as client
+import splunklib.results as results
+
+service = client.connect(
+    host='localhost',
+    port=8089,
+    username='admin',
+    password='changeme'
+)
+
+job = service.jobs.create("search index=botsv2 ...", exec_mode='blocking')
+for result in results.ResultsReader(job.results()):
+    print(result)
+
+
+🧰 Field Mapping Module
+
+Use static JSON (Phase 1) to map fields (e.g., process_name → Image in Splunk).
+
+Later, expand to auto-detect via | metadata or | tstats.
+
+
+📊 Result Viewer
+
+For Phase 1:
+
+Print results to CLI (or use Flask UI if needed).
+
+Include:
+
+Key fields from logs
+
+Rule ID or MITRE technique name
+
+Option to re-run query with exclusions (filtering)
+
+
+
+
+---
+
+🧪 Test Strategy
+
+Start with a few Sigma rules (e.g., T1059 PowerShell Execution)
+
+Use them to generate SPL and test on your botsv2 index
+
+Example SPL to validate:
+
+index=botsv2 sourcetype=WinEventLog:Security Image="*powershell.exe"
+
+
+
+---
+
+🔁 Minimal Directory Layout
+
+phase1-splunk-hunter/
+├── sigma_rules/
+│   └── t1059_powershell.yml
+├── mitre/
+│   └── attack.json
+├── mappings/
+│   └── fieldmap.json
+├── core/
+│   ├── sigma_loader.py
+│   ├── mitre_parser.py
+│   ├── splunk_query.py
+│   └── field_mapper.py
+├── main.py
+├── config.py
+└── requirements.txt
+
+
+---
+
+Would you like me to generate all the actual Python files for you now, so you can run and test them on your system?
+
