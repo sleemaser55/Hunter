@@ -1,5 +1,7 @@
 import json
 import logging
+import socket
+import ssl
 import time
 from typing import Dict, List, Optional, Union, Any
 
@@ -25,6 +27,7 @@ class SplunkQueryExecutor:
                scheme: str = config.SPLUNK_SCHEME,
                app: str = config.SPLUNK_APP,
                owner: str = config.SPLUNK_OWNER,
+               verify_ssl: bool = getattr(config, 'SPLUNK_VERIFY_SSL', True),
                timeout: int = 10) -> bool:
         """
         Connect to Splunk.
@@ -37,6 +40,7 @@ class SplunkQueryExecutor:
             scheme: Connection scheme (http/https)
             app: Splunk app context
             owner: Splunk owner context
+            verify_ssl: Whether to verify SSL certificates
             timeout: Connection timeout in seconds
         
         Returns:
@@ -46,7 +50,7 @@ class SplunkQueryExecutor:
         socket.setdefaulttimeout(timeout)  # Set timeout for socket operations
         
         try:
-            logger.info(f"Attempting to connect to Splunk at {host}:{port}...")
+            logger.info(f"Attempting to connect to Splunk at {host}:{port} with scheme {scheme}...")
             self.service = client.connect(
                 host=host,
                 port=port,
@@ -54,13 +58,24 @@ class SplunkQueryExecutor:
                 password=password,
                 scheme=scheme,
                 app=app,
-                owner=owner
+                owner=owner,
+                verify=verify_ssl
             )
             self.connected = True
             logger.info(f"Successfully connected to Splunk at {host}:{port}")
             return True
         except socket.timeout:
             logger.error(f"Connection to Splunk timed out after {timeout} seconds")
+            self.connected = False
+            return False
+        except ssl.SSLError as e:
+            logger.error(f"SSL error connecting to Splunk: {str(e)}")
+            logger.info("Consider setting SPLUNK_VERIFY_SSL=False if using self-signed certificates")
+            self.connected = False
+            return False
+        except ConnectionRefusedError:
+            logger.error(f"Connection refused by Splunk at {host}:{port}")
+            logger.info("Check that the Splunk server is running and accepting connections")
             self.connected = False
             return False
         except Exception as e:

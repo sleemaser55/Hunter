@@ -12,8 +12,9 @@ SPLUNK_USERNAME = os.environ.get("SPLUNK_USERNAME", "salah")
 SPLUNK_PASSWORD = os.environ.get("SPLUNK_PASSWORD", "asd@12345")
 SPLUNK_APP = os.environ.get("SPLUNK_APP", "search")
 SPLUNK_OWNER = os.environ.get("SPLUNK_OWNER", "nobody")
-SPLUNK_SCHEME = os.environ.get("SPLUNK_SCHEME", "https")  # Changed to https for security
+SPLUNK_SCHEME = os.environ.get("SPLUNK_SCHEME", "http")  # Using http for development
 SPLUNK_INDEX = os.environ.get("SPLUNK_INDEX", "botsv2")
+SPLUNK_VERIFY_SSL = False  # Disable SSL verification for development
 
 # MITRE ATT&CK configuration
 MITRE_ENTERPRISE_URL = "https://raw.githubusercontent.com/mitre/cti/master/enterprise-attack/enterprise-attack.json"

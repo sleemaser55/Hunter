@@ -7,7 +7,9 @@ import json
 import re
 import networkx as nx
 import datetime
-from typing import List, Dict, Any, Optional, Set
+import math
+from collections import defaultdict
+from typing import List, Dict, Any, Optional, Set, Tuple, Union
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +127,234 @@ class Visualizer:
         return {
             "nodes": nodes,
             "edges": edges
+        }
+    
+    @staticmethod
+    def generate_mitre_killchain_mapping(results: List[Dict[str, Any]],
+                                     mitre_matrix: Dict[str, Dict[str, Any]],
+                                     highlight_type: str = "frequency") -> Dict[str, Any]:
+        """
+        Generate a MITRE/Kill Chain categorization visualization from query results
+        
+        Args:
+            results: List of result dictionaries
+            mitre_matrix: Dictionary with MITRE ATT&CK matrix data
+            highlight_type: How to highlight techniques ("frequency", "severity", or "confidence")
+            
+        Returns:
+            Dictionary with nodes and edges for visualization
+        """
+        if not results or not mitre_matrix:
+            return {"nodes": [], "edges": []}
+            
+        # Extract tactics and techniques
+        tactics = {}
+        techniques = {}
+        
+        # Build the kill chain structure
+        for tactic_id, tactic_data in mitre_matrix.get("tactics", {}).items():
+            tactics[tactic_id] = {
+                "id": tactic_id,
+                "name": tactic_data.get("name", "Unknown"),
+                "description": tactic_data.get("description", ""),
+                "url": tactic_data.get("url", ""),
+                "techniques": []
+            }
+            
+        for technique_id, technique_data in mitre_matrix.get("techniques", {}).items():
+            techniques[technique_id] = {
+                "id": technique_id,
+                "name": technique_data.get("name", "Unknown"),
+                "description": technique_data.get("description", ""),
+                "tactics": technique_data.get("tactics", []),
+                "url": technique_data.get("url", ""),
+                "severity": technique_data.get("severity", "medium"),
+                "count": 0,
+                "subtechniques": []
+            }
+            
+            # Add to parent tactics
+            for tactic_id in technique_data.get("tactics", []):
+                if tactic_id in tactics:
+                    tactics[tactic_id]["techniques"].append(technique_id)
+                    
+        # Count occurrences of techniques in results
+        for result in results:
+            # Check for mitre_technique_id in the result
+            technique_id = result.get("mitre_technique_id", None)
+            if technique_id and technique_id in techniques:
+                techniques[technique_id]["count"] += 1
+                continue
+                
+            # Check for rule_mitre_id in the result
+            rule_technique_id = result.get("rule_mitre_id", None)
+            if rule_technique_id and rule_technique_id in techniques:
+                techniques[rule_technique_id]["count"] += 1
+                continue
+                
+            # Check for mitre_technique_name in the result
+            technique_name = result.get("mitre_technique_name", None)
+            if technique_name:
+                for tid, tdata in techniques.items():
+                    if tdata["name"].lower() == technique_name.lower():
+                        techniques[tid]["count"] += 1
+                        break
+        
+        # Create nodes and edges for visualization
+        nodes = []
+        edges = []
+        
+        # Add root node
+        root_node = {
+            "id": "root",
+            "label": "ATT&CK Matrix",
+            "group": "root",
+            "shape": "diamond",
+            "size": 25,
+            "color": {
+                "background": "#673AB7",
+                "border": "#512DA8",
+                "highlight": {
+                    "background": "#7E57C2",
+                    "border": "#512DA8"
+                }
+            }
+        }
+        nodes.append(root_node)
+        
+        # Add tactic nodes
+        for tactic_id, tactic_data in tactics.items():
+            tactic_node = {
+                "id": tactic_id,
+                "label": tactic_data["name"],
+                "title": tactic_data["description"],
+                "group": "tactic",
+                "shape": "box",
+                "size": 20,
+                "color": {
+                    "background": "#2196F3",
+                    "border": "#1976D2",
+                    "highlight": {
+                        "background": "#42A5F5",
+                        "border": "#1976D2"
+                    }
+                },
+                "url": tactic_data["url"]
+            }
+            nodes.append(tactic_node)
+            
+            # Connect to root
+            edges.append({
+                "from": "root",
+                "to": tactic_id,
+                "width": 2,
+                "arrows": {
+                    "to": {
+                        "enabled": True,
+                        "type": "arrow"
+                    }
+                },
+                "color": {
+                    "color": "#9E9E9E",
+                    "opacity": 0.8
+                }
+            })
+            
+        # Add technique nodes with appropriate highlighting
+        max_count = max([t["count"] for t in techniques.values()]) if techniques.values() else 1
+        for technique_id, technique_data in techniques.items():
+            # Skip techniques that aren't detected
+            if highlight_type == "frequency" and technique_data["count"] == 0:
+                continue
+                
+            # Calculate node size and color based on highlight type
+            if highlight_type == "frequency":
+                size = 10 + (technique_data["count"] / max_count) * 20
+                # Color from green to red based on frequency
+                color_intensity = min(1, technique_data["count"] / max_count)
+                r = int(255 * color_intensity)
+                g = int(255 * (1 - color_intensity))
+                b = 0
+                color = f"rgb({r},{g},{b})"
+                border_color = f"rgb({max(0, r-40)},{max(0, g-40)},{b})"
+            elif highlight_type == "severity":
+                size = 15
+                # Color based on severity
+                severity_colors = {
+                    "low": "#4CAF50",
+                    "medium": "#FFC107", 
+                    "high": "#FF5722",
+                    "critical": "#F44336"
+                }
+                color = severity_colors.get(technique_data["severity"], "#9E9E9E")
+                border_color = color
+            else:  # confidence
+                size = 15
+                # Default color
+                color = "#9C27B0"
+                border_color = "#7B1FA2"
+            
+            technique_node = {
+                "id": technique_id,
+                "label": technique_data["name"],
+                "title": technique_data["description"],
+                "group": "technique",
+                "shape": "ellipse",
+                "size": size,
+                "color": {
+                    "background": color,
+                    "border": border_color,
+                    "highlight": {
+                        "background": color,
+                        "border": border_color
+                    }
+                },
+                "count": technique_data["count"],
+                "severity": technique_data["severity"],
+                "url": technique_data["url"]
+            }
+            nodes.append(technique_node)
+            
+            # Connect to tactics
+            for tactic_id in technique_data["tactics"]:
+                if tactic_id in tactics:
+                    edges.append({
+                        "from": tactic_id,
+                        "to": technique_id,
+                        "width": 1 + (technique_data["count"] / max_count) * 3,
+                        "arrows": {
+                            "to": {
+                                "enabled": True,
+                                "type": "arrow"
+                            }
+                        },
+                        "color": {
+                            "opacity": 0.6,
+                            "color": color
+                        }
+                    })
+        
+        return {
+            "nodes": nodes,
+            "edges": edges,
+            "options": {
+                "layout": {
+                    "hierarchical": {
+                        "enabled": True,
+                        "direction": "UD",
+                        "sortMethod": "directed",
+                        "levelSeparation": 150
+                    }
+                },
+                "physics": {
+                    "hierarchicalRepulsion": {
+                        "nodeDistance": 150
+                    },
+                    "stabilization": {
+                        "iterations": 100
+                    }
+                }
+            }
         }
     
     @staticmethod
@@ -401,10 +631,25 @@ class Visualizer:
         # Initialize nodes and edges
         nodes = []
         edges = []
-        node_ids = {}  # Map event IDs to node IDs
         node_count = 0
         
-        # Process results and create nodes
+        # Create timeline axis node
+        timeline_node = {
+            "id": "timeline_axis",
+            "label": "Timeline",
+            "group": "axis",
+            "shape": "box",
+            "fixed": True,
+            "physics": False,
+            "x": 0,
+            "y": 0
+        }
+        nodes.append(timeline_node)
+        
+        # Process results chronologically
+        events_by_time = []
+        event_nodes_by_id = {}
+        
         for result in results:
             # Skip if timestamp field is missing
             if timestamp_field not in result or not result[timestamp_field]:
@@ -433,12 +678,22 @@ class Visualizer:
             if not event_time:
                 continue
             
+            # Track event for chronological ordering
+            events_by_time.append((event_time, result, node_count))
+            node_count += 1
+        
+        # Sort events by time
+        events_by_time.sort(key=lambda x: x[0])
+        
+        # Create nodes and position them horizontally by time
+        x_spacing = 100
+        for i, (event_time, result, idx) in enumerate(events_by_time):
             # Generate node content
             event_type = Visualizer._determine_event_type(result)
             event_label = Visualizer._generate_event_label(result)
             
             # Create node
-            node_id = f"event_{node_count}"
+            node_id = f"event_{idx}"
             node = {
                 "id": node_id,
                 "label": event_label,
@@ -446,86 +701,143 @@ class Visualizer:
                 "group": event_type,
                 "event": result,
                 "timestamp": event_time.isoformat(),
-                "value": 10  # Default size
+                "x": (i + 1) * x_spacing,  # Horizontal position by time
+                "y": 0,                    # Initially on timeline axis
+                "size": 10,                # Default size
+                "fixed": True,             # Fixed position
+                "physics": False           # No physics simulation
             }
             
-            # Add event fields as node properties
+            # Add event fields as node properties for hunting
             for field, value in result.items():
                 if field != "_raw" and not isinstance(value, (dict, list)):
-                    node[field] = value
+                    try:
+                        node[field] = str(value)
+                    except:
+                        pass
             
-            nodes.append(node)
-            node_ids[f"{node_count}"] = node_id
-            node_count += 1
+            # Store node for connections
+            event_nodes_by_id[node_id] = node
         
-        # Sort nodes by timestamp
-        nodes.sort(key=lambda x: x["timestamp"])
-        
-        # Connect events by time sequence
-        for i in range(len(nodes) - 1):
+        # Connect events to timeline axis
+        for node_id, node in event_nodes_by_id.items():
             edges.append({
-                "from": nodes[i]["id"],
-                "to": nodes[i+1]["id"],
-                "arrows": "to",
-                "dashes": True,
-                "label": "next",
+                "from": "timeline_axis",
+                "to": node_id,
+                "arrows": "",
                 "color": {
-                    "color": "#cccccc",
-                    "opacity": 0.5
+                    "opacity": 0.3
                 }
             })
         
         # Connect related events by field values
         if connection_fields:
-            # Build field value maps
-            field_value_nodes = {}
+            # Track nodes that have connections to adjust their position
+            connected_nodes = set()
             
-            for node in nodes:
-                event = node["event"]
-                for field in connection_fields:
-                    if field in event and event[field]:
-                        value = str(event[field])
-                        if (field, value) not in field_value_nodes:
-                            field_value_nodes[(field, value)] = []
+            # Set y-offset for connected nodes
+            y_offset = 100
+            
+            # Process each connection field
+            for field in connection_fields:
+                # Track events by field value
+                field_value_map = {}
+                
+                # Group events by field value
+                for node_id, node in event_nodes_by_id.items():
+                    result = node["event"]
+                    if field in result and result[field]:
+                        value = str(result[field])
                         
-                        field_value_nodes[(field, value)].append(node["id"])
+                        if value not in field_value_map:
+                            field_value_map[value] = []
+                        
+                        field_value_map[value].append(node_id)
+                
+                # Create connections for shared field values
+                for value, node_ids in field_value_map.items():
+                    # Skip if only one event has this value
+                    if len(node_ids) <= 1:
+                        continue
+                    
+                    # Mark these nodes as connected and adjust y position
+                    for node_id in node_ids:
+                        connected_nodes.add(node_id)
+                        
+                        # Move connected nodes below the timeline
+                        node = event_nodes_by_id[node_id]
+                        node["y"] = y_offset
+                    
+                    # Connect all nodes with this field value
+                    for i in range(len(node_ids) - 1):
+                        for j in range(i + 1, len(node_ids)):
+                            source_id = node_ids[i]
+                            target_id = node_ids[j]
+                            
+                            # Draw connection between related nodes
+                            edges.append({
+                                "from": source_id,
+                                "to": target_id,
+                                "label": field,
+                                "font": {
+                                    "size": 8,
+                                    "color": "#ffffff"
+                                },
+                                "title": f"Shared {field}: {value}",
+                                "color": {
+                                    "color": "#2196F3",
+                                    "opacity": 0.8
+                                },
+                                "arrows": {
+                                    "to": {
+                                        "enabled": True,
+                                        "type": "arrow"
+                                    }
+                                },
+                                "width": 1,
+                                "dashes": [5, 5]
+                            })
             
-            # Create connections between events with the same field values
-            for (field, value), node_list in field_value_nodes.items():
-                if len(node_list) > 1:
-                    # Connect nodes with the same field value
-                    # Create a value node
-                    value_node_id = f"value_{field}_{value}".replace(".", "_").replace(" ", "_")
-                    
-                    # Check if value node already exists
-                    value_node_exists = False
-                    for node in nodes:
-                        if node["id"] == value_node_id:
-                            value_node_exists = True
-                            break
-                    
-                    if not value_node_exists:
-                        value_node = {
-                            "id": value_node_id,
-                            "label": f"{field}: {value}",
-                            "field": field,
-                            "value": value,
-                            "group": "field_value",
-                            "shape": "diamond"
+            # Adjust vertical position for unconnected nodes
+            for node_id, node in event_nodes_by_id.items():
+                if node_id not in connected_nodes:
+                    # Leave unconnected nodes on the timeline
+                    pass
+                else:
+                    # Adjust size of connected nodes to make them more visible
+                    node["size"] = 15
+                    node["color"] = {
+                        "border": "#f44336",
+                        "background": "#f44336",
+                        "highlight": {
+                            "border": "#f44336",
+                            "background": "#f44336"
                         }
-                        nodes.append(value_node)
-                    
-                    # Connect each event to the value node
-                    for node_id in node_list:
-                        edges.append({
-                            "from": node_id,
-                            "to": value_node_id,
-                            "arrows": "",
-                            "color": {
-                                "color": "#2196F3",
-                                "opacity": 0.8
-                            }
-                        })
+                    }
+        
+        # Add all event nodes to the final nodes list
+        for node_id, node in event_nodes_by_id.items():
+            nodes.append(node)
+        
+        # Return nodes and edges with layout information
+        return {
+            "nodes": nodes,
+            "edges": edges,
+            "layout": {
+                "hierarchical": {
+                    "enabled": False
+                }
+            },
+            "physics": {
+                "enabled": False
+            },
+            "interaction": {
+                "hover": True,
+                "dragNodes": True,
+                "dragView": True,
+                "zoomView": True
+            }
+        }
         
         # Return nodes and edges
         return {
@@ -539,41 +851,92 @@ class Visualizer:
                               branch_fields: Optional[List[str]] = None,
                               connection_fields: Optional[List[str]] = None) -> Dict[str, Any]:
         """
-        Generate a timeline with branches for different fields
+        Generate a timeline with horizontal branches for different fields
         
         Args:
             results: List of result dictionaries
             timestamp_field: Field containing timestamp information
-            branch_fields: List of fields to create branches for
-            connection_fields: List of fields to use for connecting related events
+            branch_fields: List of fields to create branches for (one horizontal line per field)
+            connection_fields: List of fields to use for connecting related events across branches
             
         Returns:
             Dictionary with nodes and edges for network visualization
         """
-        if not results or not branch_fields:
+        if not results:
             return {"nodes": [], "edges": []}
+        
+        # Use default branch fields if none provided
+        if not branch_fields:
+            # Try to detect common fields for branches
+            field_counts = {}
+            for result in results:
+                for field, value in result.items():
+                    if field.startswith('_') or field == timestamp_field:
+                        continue
+                    if value:
+                        if field not in field_counts:
+                            field_counts[field] = 0
+                        field_counts[field] += 1
+            
+            # Select fields that appear frequently
+            branch_fields = [field for field, count in field_counts.items() 
+                           if count >= min(5, len(results) / 2)][:5]  # Limit to top 5 fields
+        
+        if not branch_fields:
+            # Still no branch fields - use default fields
+            branch_fields = ["host", "user", "process", "source", "dest"]
         
         # Initialize nodes and edges
         nodes = []
         edges = []
         node_count = 0
         
-        # Create field branch nodes
+        # Track connected nodes for highlighting
+        connected_nodes = set()
+        
+        # Track node positions for visual layout
+        branch_y_positions = {}
+        vertical_spacing = 100
+        
+        # Create timeline axis node
+        timeline_node = {
+            "id": "timeline_axis",
+            "label": "Timeline",
+            "group": "axis",
+            "shape": "box",
+            "fixed": True,
+            "physics": False,
+            "x": 0,
+            "y": 0
+        }
+        nodes.append(timeline_node)
+        
+        # Create field branch nodes (horizontal lines)
         branch_nodes = {}
-        for field in branch_fields:
+        for i, field in enumerate(branch_fields):
+            y_position = (i + 1) * vertical_spacing
+            branch_y_positions[field] = y_position
+            
             branch_node_id = f"branch_{field}"
             branch_node = {
                 "id": branch_node_id,
                 "label": field,
+                "title": f"Field: {field}",
                 "group": "field",
                 "shape": "box",
                 "fixed": True,
-                "physics": False
+                "physics": False,
+                "x": 0,
+                "y": y_position
             }
             nodes.append(branch_node)
             branch_nodes[field] = branch_node_id
         
         # Process results and create event nodes
+        event_nodes_by_field = {}  # Track event nodes by field and value for connections
+        event_nodes_by_id = {}     # Map node IDs to nodes
+        events_by_time = []        # Sort events by time for x-axis positioning
+        
         for result in results:
             # Skip if timestamp field is missing
             if timestamp_field not in result or not result[timestamp_field]:
@@ -602,11 +965,14 @@ class Visualizer:
             if not event_time:
                 continue
             
+            # Track event for positioning
+            events_by_time.append((event_time, result, node_count))
+            
             # Generate node content
             event_type = Visualizer._determine_event_type(result)
             event_label = Visualizer._generate_event_label(result)
             
-            # Create event node
+            # Create event node - x position will be set later after sorting
             event_node_id = f"event_{node_count}"
             event_node = {
                 "id": event_node_id,
@@ -614,66 +980,208 @@ class Visualizer:
                 "title": json.dumps(result, indent=2),
                 "group": event_type,
                 "event": result,
-                "timestamp": event_time.isoformat()
+                "timestamp": event_time.isoformat(),
+                "y": 0  # Will be positioned later
             }
             
-            # Add event fields as node properties
+            # Add event fields as node properties for filtering and hunting
             for field, value in result.items():
                 if field != "_raw" and not isinstance(value, (dict, list)):
-                    event_node[field] = value
+                    try:
+                        event_node[field] = str(value)
+                    except:
+                        pass
             
-            nodes.append(event_node)
+            # Store node for later positioning and connections
+            event_nodes_by_id[event_node_id] = event_node
             node_count += 1
             
-            # Connect to branch nodes
+            # Track nodes by field values for making connections
             for field in branch_fields:
                 if field in result and result[field]:
+                    value = str(result[field])
+                    
+                    if field not in event_nodes_by_field:
+                        event_nodes_by_field[field] = {}
+                    
+                    if value not in event_nodes_by_field[field]:
+                        event_nodes_by_field[field][value] = []
+                    
+                    event_nodes_by_field[field][value].append(event_node_id)
+        
+        # Sort events by time for x-axis positioning
+        events_by_time.sort(key=lambda x: x[0])
+        
+        # Set x positions based on time sequence
+        x_spacing = 100
+        for i, (event_time, result, _) in enumerate(events_by_time):
+            event_node_id = f"event_{_}"
+            event_node = event_nodes_by_id[event_node_id]
+            
+            # Set x position 
+            event_node["x"] = (i + 1) * x_spacing
+            
+            # Determine y position based on which branch it belongs to
+            for field in branch_fields:
+                if field in result and result[field]:
+                    # Position on the branch line
+                    event_node["y"] = branch_y_positions[field]
+                    
+                    # Connect to branch node
                     edges.append({
                         "from": branch_nodes[field],
                         "to": event_node_id,
-                        "arrows": ""
+                        "arrows": "",
+                        "color": {
+                            "opacity": 0.3
+                        }
+                    })
+                    
+                    # Only attach to one branch (first match)
+                    break
+        
+        # Connect related events across branches based on connection fields
+        if connection_fields:
+            # Track nodes with connections for visual highlighting
+            connected_nodes = set()
+            
+            # Create connections by field values
+            field_value_map = {}
+            
+            # Organize events by field value
+            for field in connection_fields:
+                field_value_map[field] = {}
+                
+                for result_idx, (_, result, _) in enumerate(events_by_time):
+                    if field not in result or not result[field]:
+                        continue
+                    
+                    event_node_id = f"event_{events_by_time[result_idx][2]}"
+                    value = str(result[field])
+                    
+                    if value not in field_value_map[field]:
+                        field_value_map[field][value] = []
+                    
+                    field_value_map[field][value].append({
+                        'node_id': event_node_id,
+                        'timestamp': events_by_time[result_idx][0],
+                        'result': result
                     })
             
-            # Create value nodes for connecting events
-            if connection_fields:
-                for field in connection_fields:
-                    if field in result and result[field]:
-                        value = str(result[field])
-                        value_node_id = f"value_{field}_{value}".replace(".", "_").replace(" ", "_")
+            # Create connections between events with shared field values
+            for field in connection_fields:
+                # Create distinct color for each field's connections
+                field_colors = {
+                    'user': '#e91e63',      # Pink
+                    'host': '#2196f3',      # Blue
+                    'src_ip': '#4caf50',    # Green
+                    'dest_ip': '#ff9800',   # Orange
+                    'process': '#9c27b0',   # Purple
+                    'command': '#795548',   # Brown
+                    'service': '#607d8b'    # Blue-gray
+                }
+                
+                connection_color = field_colors.get(field, '#f44336')  # Default to red
+                
+                for value, events in field_value_map[field].items():
+                    # Skip if only one event has this value
+                    if len(events) <= 1:
+                        continue
+                    
+                    # Sort events by timestamp
+                    events.sort(key=lambda x: x['timestamp'])
+                    
+                    # Connect events chronologically and mark them as connected
+                    for i in range(len(events) - 1):
+                        source_event = events[i]
+                        target_event = events[i + 1]
                         
-                        # Check if value node already exists
-                        value_node_exists = False
-                        for node in nodes:
-                            if node["id"] == value_node_id:
-                                value_node_exists = True
-                                break
+                        # Mark nodes as connected for visual highlighting
+                        connected_nodes.add(source_event['node_id'])
+                        connected_nodes.add(target_event['node_id'])
                         
-                        if not value_node_exists:
-                            value_node = {
-                                "id": value_node_id,
-                                "label": f"{field}: {value}",
-                                "field": field,
-                                "value": value,
-                                "group": "field_value",
-                                "shape": "diamond"
-                            }
-                            nodes.append(value_node)
-                        
-                        # Connect event to value node
+                        # Connect the two event nodes
                         edges.append({
-                            "from": event_node_id,
-                            "to": value_node_id,
-                            "arrows": "",
+                            "from": source_event['node_id'],
+                            "to": target_event['node_id'],
+                            "title": f"Shared {field}: {value}",
+                            "label": field,
+                            "font": {
+                                "size": 8,
+                                "color": "#ffffff"
+                            },
                             "color": {
-                                "color": "#2196F3",
+                                "color": connection_color,
                                 "opacity": 0.8
-                            }
+                            },
+                            "arrows": {
+                                "to": {
+                                    "enabled": True,
+                                    "type": "arrow"
+                                }
+                            },
+                            "dashes": [5, 5],
+                            "width": 2,
+                            "field": field,
+                            "value": value,
+                            "selectionWidth": 3
                         })
+                        
+                        # Create cross-branch connecting events if they appear on different branches
+                        source_field = None
+                        target_field = None
+                        
+                        # Find which branch each event belongs to
+                        for bf in branch_fields:
+                            if bf in source_event['result'] and source_event['result'][bf]:
+                                source_field = bf
+                            if bf in target_event['result'] and target_event['result'][bf]:
+                                target_field = bf
+                        
+                        # If events are on different branches, add a visual indicator
+                        if source_field != target_field and source_field is not None and target_field is not None:
+                            # Brighten the connection to highlight cross-branch connections
+                            edges[-1]["width"] = 3
+                            edges[-1]["color"]["opacity"] = 1.0
         
-        # Return nodes and edges
+        # Add all event nodes to the final nodes list with visual enhancements for connected nodes
+        for node_id, node in event_nodes_by_id.items():
+            # Check if the connected_nodes variable exists and if the node is in it
+            if connection_fields and node_id in connected_nodes:
+                # Make connected nodes more visible
+                node["size"] = 15
+                node["borderWidth"] = 2
+                node["color"] = {
+                    "border": "#2196F3",  # Blue border
+                    "background": "#2196F3",
+                    "highlight": {
+                        "border": "#1976D2",  # Darker blue on highlight
+                        "background": "#42A5F5"  # Lighter blue on highlight
+                    }
+                }
+            
+            nodes.append(node)
+        
+        # Return nodes and edges with layout information
         return {
             "nodes": nodes,
-            "edges": edges
+            "edges": edges,
+            "layout": {
+                "hierarchical": {
+                    "enabled": False
+                }
+            },
+            "physics": {
+                "enabled": False
+            },
+            "interaction": {
+                "hover": True,
+                "dragNodes": True,
+                "dragView": True,
+                "zoomView": True,
+                "selectable": True,
+                "multiselect": True
+            }
         }
     
     @staticmethod
