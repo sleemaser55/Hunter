@@ -24,7 +24,8 @@ class SplunkQueryExecutor:
                password: str = config.SPLUNK_PASSWORD,
                scheme: str = config.SPLUNK_SCHEME,
                app: str = config.SPLUNK_APP,
-               owner: str = config.SPLUNK_OWNER) -> bool:
+               owner: str = config.SPLUNK_OWNER,
+               timeout: int = 10) -> bool:
         """
         Connect to Splunk.
         
@@ -36,11 +37,16 @@ class SplunkQueryExecutor:
             scheme: Connection scheme (http/https)
             app: Splunk app context
             owner: Splunk owner context
+            timeout: Connection timeout in seconds
         
         Returns:
             True if connection successful, False otherwise
         """
+        import socket
+        socket.setdefaulttimeout(timeout)  # Set timeout for socket operations
+        
         try:
+            logger.info(f"Attempting to connect to Splunk at {host}:{port}...")
             self.service = client.connect(
                 host=host,
                 port=port,
@@ -53,6 +59,10 @@ class SplunkQueryExecutor:
             self.connected = True
             logger.info(f"Successfully connected to Splunk at {host}:{port}")
             return True
+        except socket.timeout:
+            logger.error(f"Connection to Splunk timed out after {timeout} seconds")
+            self.connected = False
+            return False
         except Exception as e:
             logger.error(f"Failed to connect to Splunk: {str(e)}")
             self.connected = False
@@ -79,7 +89,7 @@ class SplunkQueryExecutor:
         Returns:
             Dictionary with query results and metadata
         """
-        if not self.connected:
+        if not self.connected or self.service is None:
             success = self.connect()
             if not success:
                 return {
@@ -98,6 +108,9 @@ class SplunkQueryExecutor:
         
         try:
             # Create the job
+            if self.service is None:
+                raise Exception("Splunk service is not initialized")
+                
             job = self.service.jobs.create(
                 query,
                 earliest_time=earliest_time,

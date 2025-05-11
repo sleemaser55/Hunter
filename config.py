@@ -6,13 +6,13 @@ logging.basicConfig(level=logging.DEBUG,
                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 # Splunk configuration
-SPLUNK_HOST = os.environ.get("SPLUNK_HOST", "localhost")
+SPLUNK_HOST = os.environ.get("SPLUNK_HOST", "192.168.244.128")
 SPLUNK_PORT = int(os.environ.get("SPLUNK_PORT", 8089))
-SPLUNK_USERNAME = os.environ.get("SPLUNK_USERNAME", "admin")
-SPLUNK_PASSWORD = os.environ.get("SPLUNK_PASSWORD", "changeme")
+SPLUNK_USERNAME = os.environ.get("SPLUNK_USERNAME", "salah")
+SPLUNK_PASSWORD = os.environ.get("SPLUNK_PASSWORD", "asd@12345")
 SPLUNK_APP = os.environ.get("SPLUNK_APP", "search")
 SPLUNK_OWNER = os.environ.get("SPLUNK_OWNER", "nobody")
-SPLUNK_SCHEME = os.environ.get("SPLUNK_SCHEME", "https")
+SPLUNK_SCHEME = os.environ.get("SPLUNK_SCHEME", "http")  # Changed to http since most local instances use http
 SPLUNK_INDEX = os.environ.get("SPLUNK_INDEX", "botsv2")
 
 # MITRE ATT&CK configuration

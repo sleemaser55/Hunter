@@ -46,7 +46,18 @@
             </div>
             <div class="card-body">
                 <p class="card-text">Execute a quick hunt by selecting a MITRE technique and running associated Sigma rules.</p>
-                <button id="quick-hunt-btn" class="btn btn-primary" {% if not splunk_connected %}disabled{% endif %}>Start Quick Hunt</button>
+                {% if not splunk_connected %}
+                <div class="alert alert-warning mb-3">
+                    <small>
+                        <i data-feather="alert-triangle" class="icon-small me-1"></i>
+                        Could not connect to Splunk at <strong>{{ splunk_host }}</strong>. 
+                        Quick Hunt requires a Splunk connection.
+                    </small>
+                </div>
+                {% endif %}
+                <button id="quick-hunt-btn" class="btn btn-primary" {% if not splunk_connected %}disabled{% endif %}>
+                    {% if splunk_connected %}Start Quick Hunt{% else %}Splunk Disconnected{% endif %}
+                </button>
             </div>
         </div>
     </div>

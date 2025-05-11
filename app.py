@@ -1,6 +1,6 @@
 import os
 import logging
-from flask import Flask, render_template, request, jsonify, redirect, url_for, flash
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_from_directory
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 import config
@@ -28,6 +28,12 @@ field_mapper = FieldMapper()
 splunk_connected = splunk_query.connect()
 if not splunk_connected:
     logger.warning("Failed to connect to Splunk on startup")
+
+# Add a favicon route to prevent 404 errors
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory(os.path.join(app.root_path, 'static'),
+                               'favicon.ico', mimetype='image/vnd.microsoft.icon')
 
 # Import routes
 import routes

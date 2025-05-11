@@ -1,6 +1,7 @@
 from flask import render_template, request, jsonify, redirect, url_for, flash
 import logging
 from typing import Dict, List, Optional, Any
+import config
 
 from app import app, mitre_parser, sigma_loader, splunk_query, field_mapper, splunk_connected
 
@@ -9,7 +10,14 @@ logger = logging.getLogger(__name__)
 @app.route('/')
 def index():
     """Render the home page"""
-    return render_template('index.html', splunk_connected=splunk_connected)
+    global splunk_connected
+    # Try to connect to Splunk if not already connected
+    if not splunk_connected:
+        splunk_connected = splunk_query.connect()
+    
+    return render_template('index.html', 
+                          splunk_connected=splunk_connected,
+                          splunk_host=f"{config.SPLUNK_HOST}:{config.SPLUNK_PORT}")
 
 @app.route('/mitre')
 def mitre_browser():
@@ -162,15 +170,18 @@ def execute_hunt():
     results = []
     
     for rule in sigma_rules:
-        rule_id = rule.get('id')
+        rule_id = rule.get('id', '')
         
+        if not rule_id:
+            continue
+            
         # Convert to Splunk query
         splunk_query_str = sigma_loader.convert_rule_to_splunk(rule_id)
         
         if not splunk_query_str:
             results.append({
                 'rule_id': rule_id,
-                'rule_title': rule.get('title'),
+                'rule_title': rule.get('title', ''),
                 'status': 'error',
                 'error': 'Failed to convert rule to Splunk query'
             })
