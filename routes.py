@@ -19,6 +19,11 @@ def index():
                           splunk_connected=splunk_connected,
                           splunk_host=f"{config.SPLUNK_HOST}:{config.SPLUNK_PORT}")
 
+@app.route('/test_visualization')
+def test_visualization():
+    """Test page for visualizations using sample data"""
+    return render_template('test_visualization.html')
+
 @app.route('/mitre')
 def mitre_browser():
     """Render the MITRE ATT&CK browser page"""
@@ -653,6 +658,348 @@ def get_results(result_id):
 def page_not_found(e):
     """Handle 404 errors"""
     return render_template('index.html', error="Page not found"), 404
+
+@app.route('/visualize/<result_id>')
+def visualize_results(result_id):
+    """Visualize query results"""
+    # Check if result exists
+    import os
+    results_dir = os.path.join(app.root_path, 'data', 'results')
+    result_file = os.path.join(results_dir, f"{result_id}.json")
+    
+    if not os.path.exists(result_file):
+        flash(f'Results {result_id} not found', 'danger')
+        return redirect(url_for('view_results'))
+    
+    return render_template('visualize_results.html', result_id=result_id)
+
+@app.route('/api/visualize/pivot/<result_id>', methods=['GET', 'POST'])
+def api_visualize_pivot(result_id):
+    """Generate pivot visualization for query results"""
+    # Load result data
+    import os
+    import json
+    from app import visualizer
+    
+    results_dir = os.path.join(app.root_path, 'data', 'results')
+    result_file = os.path.join(results_dir, f"{result_id}.json")
+    
+    if not os.path.exists(result_file):
+        return jsonify({'status': 'error', 'message': f'Results {result_id} not found'}), 404
+    
+    try:
+        with open(result_file, 'r') as f:
+            result_data = json.load(f)
+        
+        # Get results
+        results = result_data.get('results', [])
+        
+        if not results:
+            return jsonify({
+                'status': 'error', 
+                'message': 'No results available for visualization'
+            }), 400
+        
+        # Handle POST request (update visualization)
+        if request.method == 'POST':
+            data = request.json or {}
+            fields = data.get('fields', [])
+            layout = data.get('layout', 'physics')
+        else:
+            # For GET request, auto-detect important fields
+            fields = []
+            layout = 'physics'
+        
+        # Generate visualization data
+        visualization = visualizer.generate_pivot_mindmap(results, fields)
+        
+        # Detect all available fields
+        all_fields = set()
+        for result in results:
+            all_fields.update(result.keys())
+        
+        # Remove internal fields
+        filtered_fields = [f for f in all_fields if not f.startswith('_')]
+        
+        # Select fields to include if none specified
+        if not fields:
+            selected_fields = visualizer._detect_important_fields(results)
+        else:
+            selected_fields = fields
+        
+        return jsonify({
+            'status': 'success',
+            'visualization': visualization,
+            'available_fields': sorted(filtered_fields),
+            'selected_fields': selected_fields
+        })
+        
+    except Exception as e:
+        logger.error(f"Error generating pivot visualization: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Error generating visualization: {str(e)}'
+        }), 500
+
+@app.route('/api/visualize/ttp/<result_id>', methods=['GET', 'POST'])
+def api_visualize_ttp(result_id):
+    """Generate TTP mapping visualization for query results"""
+    # Load result data
+    import os
+    import json
+    from app import visualizer, mitre_parser
+    
+    results_dir = os.path.join(app.root_path, 'data', 'results')
+    result_file = os.path.join(results_dir, f"{result_id}.json")
+    
+    if not os.path.exists(result_file):
+        return jsonify({'status': 'error', 'message': f'Results {result_id} not found'}), 404
+    
+    try:
+        with open(result_file, 'r') as f:
+            result_data = json.load(f)
+        
+        # Get results
+        results = result_data.get('results', [])
+        
+        if not results:
+            return jsonify({
+                'status': 'error', 
+                'message': 'No results available for visualization'
+            }), 400
+        
+        # Handle POST request (update visualization)
+        if request.method == 'POST':
+            data = request.json or {}
+            confidence = int(data.get('confidence', 50))
+            layout = data.get('layout', 'physics')
+        else:
+            # For GET request, use default settings
+            confidence = 50
+            layout = 'physics'
+        
+        # Get techniques
+        techniques = mitre_parser.get_techniques()
+        
+        # Map results to techniques
+        rule_mappings = {}
+        for technique in techniques:
+            technique_id = technique.get('id')
+            if not technique_id:
+                continue
+                
+            # Check if any result fields match technique indicators
+            for result in results:
+                # This is a simplified mapping - in a real implementation,
+                # more sophisticated matching would be used
+                for field, value in result.items():
+                    # Skip empty values and internal fields
+                    if not value or field.startswith('_'):
+                        continue
+                    
+                    # Convert value to string for matching
+                    str_value = str(value).lower()
+                    
+                    # Check if value contains any technique keywords
+                    for keyword in technique.get('keywords', []):
+                        if keyword.lower() in str_value:
+                            # Add to mappings
+                            if technique_id not in rule_mappings:
+                                rule_mappings[technique_id] = []
+                            
+                            rule_mappings[technique_id].append(result)
+                            break
+        
+        # Filter mappings by confidence threshold
+        # For this example, confidence is based on the number of matches
+        if confidence > 0:
+            min_matches = max(1, len(results) * (confidence / 100))
+            rule_mappings = {
+                technique_id: matches 
+                for technique_id, matches in rule_mappings.items() 
+                if len(matches) >= min_matches
+            }
+        
+        # Convert techniques list to a dictionary for the visualization function
+        techniques_dict = {technique.get('id', f'unknown_{i}'): technique for i, technique in enumerate(techniques)}
+        
+        # Generate visualization
+        visualization = visualizer.generate_ttp_mapping(results, techniques_dict, rule_mappings)
+        
+        return jsonify({
+            'status': 'success',
+            'visualization': visualization
+        })
+        
+    except Exception as e:
+        logger.error(f"Error generating TTP visualization: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Error generating visualization: {str(e)}'
+        }), 500
+
+@app.route('/api/visualize/timeline/<result_id>', methods=['GET', 'POST'])
+def api_visualize_timeline(result_id):
+    """Generate timeline visualization for query results"""
+    # Load result data
+    import os
+    import json
+    from app import visualizer
+    
+    results_dir = os.path.join(app.root_path, 'data', 'results')
+    result_file = os.path.join(results_dir, f"{result_id}.json")
+    
+    if not os.path.exists(result_file):
+        return jsonify({'status': 'error', 'message': f'Results {result_id} not found'}), 404
+    
+    try:
+        with open(result_file, 'r') as f:
+            result_data = json.load(f)
+        
+        # Get results
+        results = result_data.get('results', [])
+        
+        if not results:
+            return jsonify({
+                'status': 'error', 
+                'message': 'No results available for visualization'
+            }), 400
+        
+        # Handle POST request (update visualization)
+        if request.method == 'POST':
+            data = request.json or {}
+            entity_field = data.get('entity', None)
+            timestamp_field = data.get('timestamp', '_time')
+        else:
+            # For GET request, use default settings
+            entity_field = None
+            timestamp_field = '_time'
+        
+        # Find timestamp fields
+        timestamp_fields = ['_time']
+        for result in results:
+            for field, value in result.items():
+                if 'time' in field.lower() and field not in timestamp_fields:
+                    timestamp_fields.append(field)
+        
+        # Detect entity fields (fields with repeating values that could be used for grouping)
+        entity_fields = []
+        field_values = {}
+        
+        for result in results:
+            for field, value in result.items():
+                # Skip empty values, internal fields, and timestamp fields
+                if not value or field.startswith('_') or field in timestamp_fields:
+                    continue
+                
+                # Track field values
+                if field not in field_values:
+                    field_values[field] = set()
+                
+                field_values[field].add(str(value))
+        
+        # Fields with a reasonable number of distinct values could be entities
+        for field, values in field_values.items():
+            if 2 <= len(values) <= 10:  # Arbitrary threshold
+                entity_fields.append(field)
+        
+        # Generate visualization
+        visualization = visualizer.generate_timeline(results, timestamp_field, entity_field)
+        
+        return jsonify({
+            'status': 'success',
+            'visualization': visualization,
+            'available_timestamps': timestamp_fields,
+            'selected_timestamp': timestamp_field,
+            'available_entities': entity_fields,
+            'selected_entity': entity_field
+        })
+        
+    except Exception as e:
+        logger.error(f"Error generating timeline visualization: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Error generating visualization: {str(e)}'
+        }), 500
+
+@app.route('/api/ai/analyze/<result_id>')
+def api_ai_analyze(result_id):
+    """Generate AI analysis for query results"""
+    global splunk_connected
+    from app import ai_assistant, sigma_loader, mitre_parser
+    
+    # Check if AI assistant is available
+    if not ai_assistant.is_available():
+        return jsonify({
+            'error': 'AI analysis is not available. Please check your OpenAI API credentials.'
+        }), 500
+    
+    # Load result data
+    import os
+    import json
+    
+    results_dir = os.path.join(app.root_path, 'data', 'results')
+    result_file = os.path.join(results_dir, f"{result_id}.json")
+    
+    if not os.path.exists(result_file):
+        return jsonify({'error': f'Results {result_id} not found'}), 404
+    
+    try:
+        with open(result_file, 'r') as f:
+            result_data = json.load(f)
+        
+        # Get results
+        results = result_data.get('results', [])
+        query = result_data.get('query', '')
+        
+        if not results:
+            return jsonify({'error': 'No results available for analysis'}), 400
+        
+        # Try to detect which technique this might be related to
+        technique_id = None
+        rule = result_data.get('rule', {})
+        
+        if rule and 'id' in rule:
+            # Get Sigma rule
+            sigma_rule = sigma_loader.get_rule_by_id(rule['id'])
+            if sigma_rule and 'tags' in sigma_rule:
+                # Extract technique ID from tags
+                for tag in sigma_rule['tags']:
+                    if tag.startswith('attack.t'):
+                        technique_id = tag.split('.')[-1]
+                        break
+        
+        # If we found a technique, get its details
+        technique_data = {}
+        sigma_rules = []
+        if technique_id:
+            technique_data = mitre_parser.get_technique_by_id(technique_id)
+            sigma_rules = sigma_loader.get_rules_by_technique(technique_id)
+        
+        # Get field values for context
+        field_values = {}
+        for result in results:
+            for field, value in result.items():
+                if not field.startswith('_') and value:
+                    if field not in field_values:
+                        field_values[field] = []
+                    
+                    # Add unique values, limit to 10 per field
+                    str_value = str(value)
+                    if str_value not in field_values[field] and len(field_values[field]) < 10:
+                        field_values[field].append(str_value)
+        
+        # If we couldn't detect a specific technique, try to enhance the query
+        if technique_id and technique_data:
+            analysis = ai_assistant.analyze_ttp(technique_id, technique_data, sigma_rules)
+        else:
+            analysis = ai_assistant.enhance_query(query, None, field_values)
+        
+        return jsonify(analysis)
+        
+    except Exception as e:
+        logger.error(f"Error generating AI analysis: {str(e)}")
+        return jsonify({'error': f'Error generating analysis: {str(e)}'}), 500
 
 @app.errorhandler(500)
 def server_error(e):

@@ -1,0 +1,775 @@
+{% extends 'layout.html' %}
+
+{% block title %}Visualize Results{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-3">
+    <div class="row mb-3">
+        <div class="col">
+            <h2>Result Visualization</h2>
+            <p class="text-muted">Visualize query results with different visualization techniques.</p>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col">
+            <nav>
+                <div class="nav nav-tabs" id="nav-tab" role="tablist">
+                    <button class="nav-link active" id="nav-pivot-tab" data-bs-toggle="tab" data-bs-target="#nav-pivot" type="button" role="tab" aria-controls="nav-pivot" aria-selected="true">Pivot Mind Map</button>
+                    <button class="nav-link" id="nav-ttp-tab" data-bs-toggle="tab" data-bs-target="#nav-ttp" type="button" role="tab" aria-controls="nav-ttp" aria-selected="false">TTP Mapping</button>
+                    <button class="nav-link" id="nav-timeline-tab" data-bs-toggle="tab" data-bs-target="#nav-timeline" type="button" role="tab" aria-controls="nav-timeline" aria-selected="false">Event Timeline</button>
+                    <button class="nav-link" id="nav-ai-tab" data-bs-toggle="tab" data-bs-target="#nav-ai" type="button" role="tab" aria-controls="nav-ai" aria-selected="false">AI Analysis</button>
+                </div>
+            </nav>
+        </div>
+    </div>
+
+    <div class="tab-content" id="nav-tabContent">
+        <!-- Pivot Mind Map -->
+        <div class="tab-pane fade show active" id="nav-pivot" role="tabpanel" aria-labelledby="nav-pivot-tab">
+            <div class="row mb-3">
+                <div class="col-md-3">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5>Pivot Options</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label for="pivot-fields" class="form-label">Select Fields</label>
+                                <select id="pivot-fields" class="form-select" multiple size="10"></select>
+                                <div class="form-text">Select fields to visualize as pivot points</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="pivot-layout" class="form-label">Layout</label>
+                                <select id="pivot-layout" class="form-select">
+                                    <option value="physics">Force Directed</option>
+                                    <option value="hierarchical">Hierarchical</option>
+                                    <option value="radial">Radial</option>
+                                </select>
+                            </div>
+                            <button id="update-pivot" class="btn btn-primary w-100">Update Visualization</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-9">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5>Pivot Mind Map</h5>
+                            <div class="btn-group">
+                                <button id="pivot-fullscreen" class="btn btn-sm btn-outline-secondary">Fullscreen</button>
+                                <button id="pivot-download" class="btn btn-sm btn-outline-secondary">Download</button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div id="pivot-visualization" style="height: 600px; border: 1px solid #ccc; position: relative;">
+                                <div class="d-flex justify-content-center align-items-center h-100">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TTP Mapping -->
+        <div class="tab-pane fade" id="nav-ttp" role="tabpanel" aria-labelledby="nav-ttp-tab">
+            <div class="row mb-3">
+                <div class="col-md-3">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5>TTP Options</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label for="ttp-confidence" class="form-label">Confidence Threshold: <span id="ttp-confidence-value">50%</span></label>
+                                <input type="range" class="form-range" id="ttp-confidence" min="0" max="100" value="50">
+                                <div class="form-text">Adjust confidence threshold for technique matching</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="ttp-layout" class="form-label">Layout</label>
+                                <select id="ttp-layout" class="form-select">
+                                    <option value="physics">Force Directed</option>
+                                    <option value="hierarchical">Hierarchical</option>
+                                </select>
+                            </div>
+                            <button id="update-ttp" class="btn btn-primary w-100">Update Visualization</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-9">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5>TTP Mapping</h5>
+                            <div class="btn-group">
+                                <button id="ttp-fullscreen" class="btn btn-sm btn-outline-secondary">Fullscreen</button>
+                                <button id="ttp-download" class="btn btn-sm btn-outline-secondary">Download</button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div id="ttp-visualization" style="height: 600px; border: 1px solid #ccc; position: relative;">
+                                <div class="d-flex justify-content-center align-items-center h-100">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Event Timeline -->
+        <div class="tab-pane fade" id="nav-timeline" role="tabpanel" aria-labelledby="nav-timeline-tab">
+            <div class="row mb-3">
+                <div class="col-md-3">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5>Timeline Options</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label for="timeline-timestamp" class="form-label">Timestamp Field</label>
+                                <select id="timeline-timestamp" class="form-select"></select>
+                                <div class="form-text">Select the field containing timestamp information</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="timeline-entity" class="form-label">Entity Field</label>
+                                <select id="timeline-entity" class="form-select">
+                                    <option value="">None (Group all events)</option>
+                                </select>
+                                <div class="form-text">Select field to group events by (e.g., host, user)</div>
+                            </div>
+                            <button id="update-timeline" class="btn btn-primary w-100">Update Timeline</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-9">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5>Event Timeline</h5>
+                            <div class="btn-group">
+                                <button id="timeline-fullscreen" class="btn btn-sm btn-outline-secondary">Fullscreen</button>
+                                <button id="timeline-download" class="btn btn-sm btn-outline-secondary">Download</button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div id="timeline-visualization" style="height: 600px; border: 1px solid #ccc; position: relative;">
+                                <div class="d-flex justify-content-center align-items-center h-100">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- AI Analysis -->
+        <div class="tab-pane fade" id="nav-ai" role="tabpanel" aria-labelledby="nav-ai-tab">
+            <div class="row mb-3">
+                <div class="col">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5>AI-Powered Analysis</h5>
+                            <button id="refresh-ai" class="btn btn-sm btn-outline-primary">Refresh Analysis</button>
+                        </div>
+                        <div class="card-body">
+                            <div id="ai-analysis">
+                                <div class="d-flex justify-content-center align-items-center py-5">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    <span class="ms-3">Generating AI analysis...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row mb-3">
+                <div class="col">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5>Enhanced Queries</h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="enhanced-queries">
+                                <!-- Enhanced queries will be loaded here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal for Fullscreen Visualization -->
+<div class="modal fade" id="visualization-modal" tabindex="-1" aria-labelledby="visualization-modal-label" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="visualization-modal-label">Visualization</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div id="modal-visualization" style="width: 100%; height: 100%;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/vis-network.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/vis-timeline/7.7.0/vis-timeline-graph2d.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.22.1/cytoscape.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
+<script>
+    // Store visualizations
+    let pivotNetwork = null;
+    let ttpNetwork = null;
+    let timeline = null;
+    const resultId = "{{ result_id }}";
+    const visualizationModal = new bootstrap.Modal(document.getElementById('visualization-modal'));
+
+    // Initialize on document ready
+    document.addEventListener('DOMContentLoaded', function() {
+        // Load pivot visualization
+        loadPivotVisualization();
+
+        // Tab change events
+        document.getElementById('nav-ttp-tab').addEventListener('click', function() {
+            if (!ttpNetwork) {
+                loadTTPVisualization();
+            }
+        });
+
+        document.getElementById('nav-timeline-tab').addEventListener('click', function() {
+            if (!timeline) {
+                loadTimelineVisualization();
+            }
+        });
+
+        document.getElementById('nav-ai-tab').addEventListener('click', function() {
+            loadAIAnalysis();
+        });
+
+        // Update buttons
+        document.getElementById('update-pivot').addEventListener('click', loadPivotVisualization);
+        document.getElementById('update-ttp').addEventListener('click', loadTTPVisualization);
+        document.getElementById('update-timeline').addEventListener('click', loadTimelineVisualization);
+        document.getElementById('refresh-ai').addEventListener('click', loadAIAnalysis);
+
+        // Confidence slider
+        document.getElementById('ttp-confidence').addEventListener('input', function() {
+            document.getElementById('ttp-confidence-value').textContent = this.value + '%';
+        });
+
+        // Fullscreen buttons
+        document.getElementById('pivot-fullscreen').addEventListener('click', function() {
+            openFullscreen('pivot-visualization', 'Pivot Mind Map');
+        });
+
+        document.getElementById('ttp-fullscreen').addEventListener('click', function() {
+            openFullscreen('ttp-visualization', 'TTP Mapping');
+        });
+
+        document.getElementById('timeline-fullscreen').addEventListener('click', function() {
+            openFullscreen('timeline-visualization', 'Event Timeline');
+        });
+
+        // Download buttons
+        document.getElementById('pivot-download').addEventListener('click', function() {
+            downloadVisualization('pivot-visualization', 'pivot_mindmap');
+        });
+
+        document.getElementById('ttp-download').addEventListener('click', function() {
+            downloadVisualization('ttp-visualization', 'ttp_mapping');
+        });
+
+        document.getElementById('timeline-download').addEventListener('click', function() {
+            downloadVisualization('timeline-visualization', 'event_timeline');
+        });
+    });
+
+    function openFullscreen(elementId, title) {
+        const sourceEl = document.getElementById(elementId);
+        const targetEl = document.getElementById('modal-visualization');
+        document.getElementById('visualization-modal-label').textContent = title;
+        
+        // Clone visualization to modal
+        targetEl.innerHTML = '';
+        const clone = sourceEl.cloneNode(true);
+        clone.style.height = '100%';
+        targetEl.appendChild(clone);
+        
+        // Show modal
+        visualizationModal.show();
+    }
+
+    function downloadVisualization(elementId, filename) {
+        const element = document.getElementById(elementId);
+        
+        html2canvas(element).then(canvas => {
+            const link = document.createElement('a');
+            link.download = filename + '.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        });
+    }
+
+    function loadPivotVisualization() {
+        const container = document.getElementById('pivot-visualization');
+        const fieldsSelect = document.getElementById('pivot-fields');
+        const layout = document.getElementById('pivot-layout').value;
+        
+        // Show loading
+        container.innerHTML = '<div class="d-flex justify-content-center align-items-center h-100"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+        
+        // Get selected fields
+        const selectedFields = Array.from(fieldsSelect.selectedOptions).map(option => option.value);
+        
+        // Load data from API
+        fetch(`/api/visualize/pivot/${resultId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                fields: selectedFields,
+                layout: layout
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'error') {
+                container.innerHTML = `<div class="alert alert-danger">${data.message}</div>`;
+                return;
+            }
+            
+            // Update field select options if needed
+            if (fieldsSelect.options.length === 0) {
+                data.available_fields.forEach(field => {
+                    const option = document.createElement('option');
+                    option.value = field;
+                    option.text = field;
+                    option.selected = data.selected_fields.includes(field);
+                    fieldsSelect.appendChild(option);
+                });
+            }
+            
+            // Create visualization
+            container.innerHTML = '';
+            const visualization = data.visualization;
+            
+            // Create a network
+            const options = {
+                nodes: {
+                    shape: 'dot',
+                    size: 16,
+                    font: {
+                        size: 12,
+                        face: 'Tahoma'
+                    },
+                    borderWidth: 2
+                },
+                edges: {
+                    width: 1,
+                    smooth: {
+                        type: 'continuous'
+                    }
+                },
+                physics: {
+                    enabled: layout === 'physics',
+                    stabilization: false,
+                    solver: 'forceAtlas2Based'
+                },
+                layout: {
+                    hierarchical: {
+                        enabled: layout === 'hierarchical',
+                        direction: 'UD',
+                        sortMethod: 'directed'
+                    }
+                },
+                interaction: {
+                    navigationButtons: true,
+                    keyboard: true
+                }
+            };
+            
+            pivotNetwork = new vis.Network(container, {
+                nodes: new vis.DataSet(visualization.nodes),
+                edges: new vis.DataSet(visualization.edges)
+            }, options);
+            
+            // Add click event
+            pivotNetwork.on("doubleClick", function(params) {
+                if (params.nodes.length > 0) {
+                    const nodeId = params.nodes[0];
+                    const node = visualization.nodes.find(n => n.id === nodeId);
+                    
+                    if (node && node.field && node.value) {
+                        const query = `${node.field}="${node.value}"`;
+                        if (confirm(`Execute a new query for ${query}?`)) {
+                            window.location.href = `/direct_query?query=${encodeURIComponent(query)}`;
+                        }
+                    }
+                }
+            });
+        })
+        .catch(error => {
+            container.innerHTML = `<div class="alert alert-danger">Error loading visualization: ${error.message}</div>`;
+        });
+    }
+
+    function loadTTPVisualization() {
+        const container = document.getElementById('ttp-visualization');
+        const confidence = document.getElementById('ttp-confidence').value;
+        const layout = document.getElementById('ttp-layout').value;
+        
+        // Show loading
+        container.innerHTML = '<div class="d-flex justify-content-center align-items-center h-100"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+        
+        // Load data from API
+        fetch(`/api/visualize/ttp/${resultId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                confidence: confidence,
+                layout: layout
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'error') {
+                container.innerHTML = `<div class="alert alert-danger">${data.message}</div>`;
+                return;
+            }
+            
+            // Create visualization
+            container.innerHTML = '';
+            const visualization = data.visualization;
+            
+            // Create a network
+            const options = {
+                nodes: {
+                    shape: 'dot',
+                    size: 20,
+                    font: {
+                        size: 12,
+                        face: 'Tahoma'
+                    },
+                    borderWidth: 2
+                },
+                edges: {
+                    width: 2,
+                    smooth: {
+                        type: 'continuous'
+                    },
+                    arrows: {
+                        to: {
+                            enabled: true,
+                            scaleFactor: 0.5
+                        }
+                    }
+                },
+                groups: {
+                    tactic: {
+                        shape: 'diamond',
+                        color: {
+                            background: '#d62728',
+                            border: '#a91b1b'
+                        }
+                    },
+                    technique: {
+                        shape: 'dot',
+                        color: {
+                            background: '#1f77b4',
+                            border: '#0c4c8a'
+                        }
+                    },
+                    event: {
+                        shape: 'square',
+                        color: {
+                            background: '#2ca02c',
+                            border: '#1a7a1a'
+                        }
+                    }
+                },
+                physics: {
+                    enabled: layout === 'physics',
+                    stabilization: true,
+                    solver: 'forceAtlas2Based'
+                },
+                layout: {
+                    hierarchical: {
+                        enabled: layout === 'hierarchical',
+                        direction: 'UD',
+                        sortMethod: 'directed'
+                    }
+                },
+                interaction: {
+                    navigationButtons: true,
+                    keyboard: true
+                }
+            };
+            
+            ttpNetwork = new vis.Network(container, {
+                nodes: new vis.DataSet(visualization.nodes),
+                edges: new vis.DataSet(visualization.edges)
+            }, options);
+            
+            // Add click event
+            ttpNetwork.on("doubleClick", function(params) {
+                if (params.nodes.length > 0) {
+                    const nodeId = params.nodes[0];
+                    const node = visualization.nodes.find(n => n.id === nodeId);
+                    
+                    if (node && node.technique_id) {
+                        if (confirm(`View details for technique ${node.technique_id}?`)) {
+                            window.open(`/mitre/technique/${node.technique_id}`, '_blank');
+                        }
+                    }
+                }
+            });
+        })
+        .catch(error => {
+            container.innerHTML = `<div class="alert alert-danger">Error loading visualization: ${error.message}</div>`;
+        });
+    }
+
+    function loadTimelineVisualization() {
+        const container = document.getElementById('timeline-visualization');
+        const timestampSelect = document.getElementById('timeline-timestamp');
+        const entitySelect = document.getElementById('timeline-entity');
+        
+        // Show loading
+        container.innerHTML = '<div class="d-flex justify-content-center align-items-center h-100"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+        
+        // Get selected values
+        const timestamp = timestampSelect.value || '_time';
+        const entity = entitySelect.value || null;
+        
+        // Load data from API
+        fetch(`/api/visualize/timeline/${resultId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                timestamp: timestamp,
+                entity: entity
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'error') {
+                container.innerHTML = `<div class="alert alert-danger">${data.message}</div>`;
+                return;
+            }
+            
+            // Update select options if needed
+            if (timestampSelect.options.length === 0) {
+                data.available_timestamps.forEach(field => {
+                    const option = document.createElement('option');
+                    option.value = field;
+                    option.text = field;
+                    option.selected = field === data.selected_timestamp;
+                    timestampSelect.appendChild(option);
+                });
+            }
+            
+            if (entitySelect.options.length === 1) {
+                data.available_entities.forEach(field => {
+                    const option = document.createElement('option');
+                    option.value = field;
+                    option.text = field;
+                    option.selected = field === data.selected_entity;
+                    entitySelect.appendChild(option);
+                });
+            }
+            
+            // Create visualization
+            container.innerHTML = '';
+            const visualization = data.visualization;
+            
+            // Create timeline items
+            const items = new vis.DataSet(visualization.items);
+            
+            // Configure timeline options
+            const options = {
+                stack: true,
+                stackSubgroups: true,
+                orientation: 'top',
+                minHeight: '500px',
+                zoomMin: 1000 * 60, // 1 minute
+                zoomMax: 1000 * 60 * 60 * 24 * 31, // 31 days
+                tooltip: {
+                    followMouse: true,
+                    overflowMethod: 'cap'
+                }
+            };
+            
+            // Create timeline
+            timeline = new vis.Timeline(container, items, options);
+            
+            // Add click event
+            timeline.on('click', function(properties) {
+                if (properties.item) {
+                    const item = items.get(properties.item);
+                    if (item && item.event) {
+                        const eventData = JSON.stringify(item.event, null, 2);
+                        alert(`Event Details:\n${eventData}`);
+                    }
+                }
+            });
+        })
+        .catch(error => {
+            container.innerHTML = `<div class="alert alert-danger">Error loading visualization: ${error.message}</div>`;
+        });
+    }
+
+    function loadAIAnalysis() {
+        const analysisContainer = document.getElementById('ai-analysis');
+        const queriesContainer = document.getElementById('enhanced-queries');
+        
+        // Show loading
+        analysisContainer.innerHTML = '<div class="d-flex justify-content-center align-items-center py-5"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><span class="ms-3">Generating AI analysis...</span></div>';
+        queriesContainer.innerHTML = '';
+        
+        // Load data from API
+        fetch(`/api/ai/analyze/${resultId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                analysisContainer.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+                return;
+            }
+            
+            // Display analysis results
+            if (data.summary) {
+                // TTP analysis
+                let html = `<div class="mb-4"><h4>Summary</h4><p>${data.summary}</p></div>`;
+                
+                if (data.key_indicators && data.key_indicators.length > 0) {
+                    html += '<div class="mb-4"><h4>Key Indicators</h4><ul>';
+                    data.key_indicators.forEach(indicator => {
+                        html += `<li>${indicator}</li>`;
+                    });
+                    html += '</ul></div>';
+                }
+                
+                if (data.common_artifacts && data.common_artifacts.length > 0) {
+                    html += '<div class="mb-4"><h4>Common Artifacts</h4><ul>';
+                    data.common_artifacts.forEach(artifact => {
+                        html += `<li>${artifact}</li>`;
+                    });
+                    html += '</ul></div>';
+                }
+                
+                if (data.evasion_tactics && data.evasion_tactics.length > 0) {
+                    html += '<div class="mb-4"><h4>Evasion Tactics</h4><ul>';
+                    data.evasion_tactics.forEach(tactic => {
+                        html += `<li>${tactic}</li>`;
+                    });
+                    html += '</ul></div>';
+                }
+                
+                if (data.hunting_tips && data.hunting_tips.length > 0) {
+                    html += '<div class="mb-4"><h4>Hunting Tips</h4><ul>';
+                    data.hunting_tips.forEach(tip => {
+                        html += `<li>${tip}</li>`;
+                    });
+                    html += '</ul></div>';
+                }
+                
+                analysisContainer.innerHTML = html;
+                
+                // Additional queries
+                if (data.additional_queries && data.additional_queries.length > 0) {
+                    let queriesHtml = '';
+                    data.additional_queries.forEach(query => {
+                        queriesHtml += `
+                            <div class="card mb-3">
+                                <div class="card-header">${query}</div>
+                                <div class="card-body">
+                                    <div class="d-grid gap-2">
+                                        <button class="btn btn-primary execute-query" data-query="${encodeURIComponent(query)}">Execute Query</button>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    queriesContainer.innerHTML = queriesHtml;
+                    
+                    // Add event listeners to execute query buttons
+                    document.querySelectorAll('.execute-query').forEach(button => {
+                        button.addEventListener('click', function() {
+                            const query = decodeURIComponent(this.getAttribute('data-query'));
+                            window.location.href = `/direct_query?query=${encodeURIComponent(query)}`;
+                        });
+                    });
+                }
+            } else if (data.analysis) {
+                // Query enhancement
+                let html = `<div class="mb-4"><h4>Analysis</h4><p>${data.analysis}</p></div>`;
+                
+                if (data.suggested_improvements && data.suggested_improvements.length > 0) {
+                    html += '<div class="mb-4"><h4>Suggested Improvements</h4><ul>';
+                    data.suggested_improvements.forEach(improvement => {
+                        html += `<li>${improvement}</li>`;
+                    });
+                    html += '</ul></div>';
+                }
+                
+                analysisContainer.innerHTML = html;
+                
+                // Enhanced queries
+                if (data.enhanced_queries && data.enhanced_queries.length > 0) {
+                    let queriesHtml = '';
+                    data.enhanced_queries.forEach(queryInfo => {
+                        queriesHtml += `
+                            <div class="card mb-3">
+                                <div class="card-header">${queryInfo.name}</div>
+                                <div class="card-body">
+                                    <p>${queryInfo.description}</p>
+                                    <pre class="bg-dark text-light p-2 rounded"><code>${queryInfo.query}</code></pre>
+                                    <div class="d-grid gap-2">
+                                        <button class="btn btn-primary execute-query" data-query="${encodeURIComponent(queryInfo.query)}">Execute Query</button>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    queriesContainer.innerHTML = queriesHtml;
+                    
+                    // Add event listeners to execute query buttons
+                    document.querySelectorAll('.execute-query').forEach(button => {
+                        button.addEventListener('click', function() {
+                            const query = decodeURIComponent(this.getAttribute('data-query'));
+                            window.location.href = `/direct_query?query=${encodeURIComponent(query)}`;
+                        });
+                    });
+                }
+            } else {
+                // No recognizable data structure
+                analysisContainer.innerHTML = `<div class="alert alert-warning">No analysis data available.</div>`;
+            }
+        })
+        .catch(error => {
+            analysisContainer.innerHTML = `<div class="alert alert-danger">Error loading AI analysis: ${error.message}</div>`;
+        });
+    }
+</script>
+{% endblock %}

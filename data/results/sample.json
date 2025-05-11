@@ -1,0 +1,120 @@
+{
+  "query": "search index=main sourcetype=windows:eventlog:security EventCode=4624",
+  "timestamp": "2025-05-11T15:59:17.000Z",
+  "rule": {
+    "id": "win_account_discovery",
+    "title": "Account Discovery"
+  },
+  "results": [
+    {
+      "_time": "2025-05-11T10:15:32.000Z",
+      "EventCode": "4624",
+      "host": "windc01.contoso.local",
+      "user": "administrator",
+      "src_ip": "192.168.1.105",
+      "logon_type": "3",
+      "auth_package": "NTLM",
+      "process_name": "C:\\Windows\\System32\\svchost.exe",
+      "status": "0x0"
+    },
+    {
+      "_time": "2025-05-11T10:16:45.000Z",
+      "EventCode": "4624",
+      "host": "windc01.contoso.local",
+      "user": "jsmith",
+      "src_ip": "192.168.1.120",
+      "logon_type": "2",
+      "auth_package": "NTLM",
+      "process_name": "C:\\Windows\\System32\\lsass.exe",
+      "status": "0x0"
+    },
+    {
+      "_time": "2025-05-11T10:19:22.000Z",
+      "EventCode": "4624",
+      "host": "fileserver.contoso.local",
+      "user": "service_acct",
+      "src_ip": "192.168.1.110",
+      "logon_type": "3",
+      "auth_package": "Kerberos",
+      "process_name": "C:\\Windows\\System32\\services.exe",
+      "status": "0x0"
+    },
+    {
+      "_time": "2025-05-11T10:23:15.000Z",
+      "EventCode": "4624",
+      "host": "workstation15.contoso.local",
+      "user": "jdoe",
+      "src_ip": "192.168.2.56",
+      "logon_type": "2",
+      "auth_package": "NTLM",
+      "process_name": "C:\\Windows\\System32\\lsass.exe",
+      "status": "0x0"
+    },
+    {
+      "_time": "2025-05-11T10:25:49.000Z",
+      "EventCode": "4624",
+      "host": "windc01.contoso.local",
+      "user": "administrator",
+      "src_ip": "192.168.1.154",
+      "logon_type": "10",
+      "auth_package": "Negotiate",
+      "process_name": "C:\\Windows\\System32\\svchost.exe",
+      "status": "0x0"
+    },
+    {
+      "_time": "2025-05-11T10:27:33.000Z",
+      "EventCode": "4624",
+      "host": "workstation22.contoso.local",
+      "user": "mwilliams",
+      "src_ip": "192.168.2.78",
+      "logon_type": "2",
+      "auth_package": "NTLM",
+      "process_name": "C:\\Windows\\System32\\lsass.exe",
+      "status": "0x0"
+    },
+    {
+      "_time": "2025-05-11T10:29:11.000Z",
+      "EventCode": "4624",
+      "host": "appserver.contoso.local",
+      "user": "app_service",
+      "src_ip": "192.168.1.200",
+      "logon_type": "3",
+      "auth_package": "Kerberos",
+      "process_name": "C:\\Windows\\System32\\services.exe",
+      "status": "0x0"
+    },
+    {
+      "_time": "2025-05-11T10:32:04.000Z",
+      "EventCode": "4624",
+      "host": "workstation15.contoso.local",
+      "user": "jsmith",
+      "src_ip": "192.168.2.56",
+      "logon_type": "2",
+      "auth_package": "NTLM",
+      "process_name": "C:\\Windows\\System32\\lsass.exe",
+      "status": "0x0"
+    },
+    {
+      "_time": "2025-05-11T10:35:28.000Z",
+      "EventCode": "4624",
+      "host": "windc01.contoso.local",
+      "user": "system",
+      "src_ip": "127.0.0.1",
+      "logon_type": "5",
+      "auth_package": "Negotiate",
+      "process_name": "C:\\Windows\\System32\\services.exe",
+      "status": "0x0"
+    },
+    {
+      "_time": "2025-05-11T10:38:16.000Z",
+      "EventCode": "4624",
+      "host": "dbserver.contoso.local",
+      "user": "sql_admin",
+      "src_ip": "192.168.1.135",
+      "logon_type": "3",
+      "auth_package": "Kerberos",
+      "process_name": "C:\\Windows\\System32\\svchost.exe",
+      "status": "0x0"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{% extends 'layout.html' %}
+
+{% block title %}Test Visualizations{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-3">
+    <div class="row mb-3">
+        <div class="col">
+            <h2>Visualization Test Page</h2>
+            <p class="text-muted">Test page for visualization components using sample data.</p>
+        </div>
+    </div>
+
+    <div class="row mb-3">
+        <div class="col">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Sample Data</h5>
+                </div>
+                <div class="card-body">
+                    <p>Using sample data from: <code>data/results/sample.json</code></p>
+                    <a href="/visualize/sample" class="btn btn-primary">View Visualizations</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

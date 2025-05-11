@@ -19,9 +19,12 @@
             <a href="{{ url_for('direct_query') }}" class="btn btn-secondary me-2">
                 <i data-feather="arrow-left"></i> New Query
             </a>
-            <button id="export-json" class="btn btn-primary">
+            <button id="export-json" class="btn btn-primary me-2">
                 <i data-feather="download"></i> Export JSON
             </button>
+            <a id="advanced-viz-btn" href="#" class="btn btn-info">
+                <i data-feather="bar-chart-2"></i> Advanced Visualizations
+            </a>
         </div>
     </div>
 
@@ -334,6 +337,20 @@
             document.body.removeChild(a);
             window.URL.revokeObjectURL(url);
         }, 0);
+    });
+    
+    // Advanced visualizations button
+    document.getElementById('advanced-viz-btn').addEventListener('click', function() {
+        // Get result ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const resultId = urlParams.get('id');
+        
+        if (resultId) {
+            // Navigate to advanced visualization page
+            window.location.href = `/visualize/${resultId}`;
+        } else {
+            alert('No result ID available for visualization');
+        }
     });
 </script>
 {% endblock %}
