@@ -208,6 +208,34 @@ def execute_query():
         max_count=count
     )
     
+    # Generate a unique ID for this result set
+    import uuid
+    import json
+    import os
+    import datetime
+    
+    result_id = str(uuid.uuid4())
+    
+    # Save results to disk for later retrieval
+    # In a production app, this would be stored in a database
+    try:
+        # Add timestamp and query to result data
+        result['timestamp'] = datetime.datetime.now().isoformat()
+        result['query'] = query
+        
+        # Ensure results directory exists
+        results_dir = os.path.join(app.root_path, 'data', 'results')
+        os.makedirs(results_dir, exist_ok=True)
+        
+        # Save result to JSON file
+        with open(os.path.join(results_dir, f"{result_id}.json"), 'w') as f:
+            json.dump(result, f)
+        
+        # Add result ID to response
+        result['result_id'] = result_id
+    except Exception as e:
+        logger.error(f"Error saving results: {str(e)}")
+    
     return jsonify(result)
 
 @app.route('/api/splunk/query', methods=['POST'])
@@ -386,7 +414,60 @@ def sigma_execute():
 @app.route('/results')
 def view_results():
     """View query results page"""
-    return render_template('query_results.html')
+    result_id = request.args.get('id')
+    if not result_id:
+        # If no result ID is provided, redirect to query page
+        return redirect(url_for('direct_query'))
+    
+    return render_template('view_results.html')
+
+@app.route('/api/results/<result_id>')
+def get_results(result_id):
+    """API endpoint to get query results"""
+    from app import ttp_mapper
+    
+    # Query results are stored in memory for now
+    # In a production app, these would be stored in a database
+    # Let's simulate retrieving results with some test data if needed
+    
+    # Check if we have saved results for this ID
+    # Let's assume we do for now - normally this would be fetched from a database
+    try:
+        # Load results from saved JSON file (if exists)
+        import os
+        import json
+        
+        results_dir = os.path.join(app.root_path, 'data', 'results')
+        os.makedirs(results_dir, exist_ok=True)
+        
+        results_file = os.path.join(results_dir, f"{result_id}.json")
+        
+        if os.path.exists(results_file):
+            with open(results_file, 'r') as f:
+                result_data = json.load(f)
+                
+            # Get the results list from the data
+            results = result_data.get('results', [])
+            
+            # Map results to MITRE ATT&CK techniques
+            mappings = ttp_mapper.map_results_to_techniques(results)
+            
+            # Create mind map data
+            mindmap = ttp_mapper.create_mindmap_data(results, mappings)
+            
+            return jsonify({
+                'query': result_data.get('query', ''),
+                'timestamp': result_data.get('timestamp', ''),
+                'results': results,
+                'mappings': mappings,
+                'mindmap': mindmap
+            })
+        else:
+            return jsonify({'error': f'No results found for ID: {result_id}'}), 404
+            
+    except Exception as e:
+        logger.error(f"Error retrieving results: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @app.errorhandler(404)
 def page_not_found(e):

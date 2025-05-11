@@ -99,9 +99,10 @@ class SplunkQueryExecutor:
                     "results": []
                 }
         
-        # Add index if not already in query
-        if "index=" not in query:
-            query = f"index={index} " + query
+        # Don't automatically add index - use exactly what the user provided
+        # Original code:
+        # if "index=" not in query:
+        #     query = f"index={index} " + query
         
         logger.info(f"Executing Splunk query: {query}")
         start_time = time.time()

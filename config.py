@@ -12,7 +12,7 @@ SPLUNK_USERNAME = os.environ.get("SPLUNK_USERNAME", "salah")
 SPLUNK_PASSWORD = os.environ.get("SPLUNK_PASSWORD", "asd@12345")
 SPLUNK_APP = os.environ.get("SPLUNK_APP", "search")
 SPLUNK_OWNER = os.environ.get("SPLUNK_OWNER", "nobody")
-SPLUNK_SCHEME = os.environ.get("SPLUNK_SCHEME", "http")  # Changed to http since most local instances use http
+SPLUNK_SCHEME = os.environ.get("SPLUNK_SCHEME", "https")  # Changed to https for security
 SPLUNK_INDEX = os.environ.get("SPLUNK_INDEX", "botsv2")
 
 # MITRE ATT&CK configuration

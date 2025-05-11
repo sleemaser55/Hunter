@@ -1,0 +1,696 @@
+{% extends "base.html" %}
+
+{% block title %}View Results{% endblock %}
+
+{% block styles %}
+<link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet">
+<style>
+    #mindmap-container {
+        height: 600px;
+        border: 1px solid var(--bs-gray-700);
+        border-radius: 5px;
+    }
+    
+    .node circle {
+        fill: var(--bs-primary);
+        stroke: var(--bs-gray-200);
+        stroke-width: 1.5px;
+    }
+    
+    .node.search circle {
+        fill: var(--bs-info);
+    }
+    
+    .node.result circle {
+        fill: var(--bs-success);
+    }
+    
+    .node.field circle {
+        fill: var(--bs-warning);
+    }
+    
+    .node.value circle {
+        fill: var(--bs-light);
+    }
+    
+    .node.technique circle {
+        fill: var(--bs-danger);
+    }
+    
+    .node text {
+        font-size: 12px;
+    }
+    
+    .link {
+        fill: none;
+        stroke: var(--bs-gray-600);
+        stroke-width: 1.5px;
+    }
+    
+    .raw-results {
+        white-space: pre-wrap;
+        font-family: monospace;
+        max-height: 600px;
+        overflow-y: auto;
+        background-color: var(--bs-gray-900);
+        color: var(--bs-light);
+        padding: 10px;
+        border-radius: 5px;
+    }
+    
+    .card-body {
+        padding: 1.5rem;
+    }
+    
+    .no-results {
+        color: var(--bs-gray-500);
+        text-align: center;
+        margin-top: 2rem;
+    }
+    
+    .pivot-link {
+        cursor: pointer;
+        text-decoration: underline;
+        color: var(--bs-link-color);
+    }
+
+    .results-table {
+        width: 100%;
+        margin-bottom: 1rem;
+        color: var(--bs-table-color);
+        vertical-align: top;
+        border-color: var(--bs-table-border-color);
+    }
+
+    .results-table th,
+    .results-table td {
+        padding: 0.5rem;
+        border-bottom: 1px solid var(--bs-gray-700);
+    }
+
+    .ttp-badge {
+        display: inline-block;
+        margin: 0.2rem;
+        padding: 0.35rem 0.5rem;
+        font-size: 0.75rem;
+        font-weight: 700;
+        line-height: 1;
+        text-align: center;
+        white-space: nowrap;
+        vertical-align: baseline;
+        border-radius: 0.375rem;
+    }
+
+    .high-match {
+        background-color: var(--bs-danger);
+        color: white;
+    }
+
+    .medium-match {
+        background-color: var(--bs-warning);
+        color: var(--bs-dark);
+    }
+
+    .low-match {
+        background-color: var(--bs-info);
+        color: white;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="mb-4">Query Results</h1>
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h5 class="mb-0" id="results-count"></h5>
+        </div>
+        <div>
+            <a href="{{ url_for('direct_query') }}" class="btn btn-secondary me-2">
+                <i data-feather="arrow-left"></i> New Query
+            </a>
+            <button id="export-json" class="btn btn-primary">
+                <i data-feather="download"></i> Export JSON
+            </button>
+        </div>
+    </div>
+
+    <ul class="nav nav-tabs mb-3" id="resultsTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="table-tab" data-bs-toggle="tab" data-bs-target="#table" type="button" role="tab" aria-controls="table" aria-selected="true">
+                <i data-feather="list"></i> Table View
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="mindmap-tab" data-bs-toggle="tab" data-bs-target="#mindmap" type="button" role="tab" aria-controls="mindmap" aria-selected="false">
+                <i data-feather="share-2"></i> Mind Map
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="ttp-tab" data-bs-toggle="tab" data-bs-target="#ttp" type="button" role="tab" aria-controls="ttp" aria-selected="false">
+                <i data-feather="shield"></i> TTP Mappings
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="raw-tab" data-bs-toggle="tab" data-bs-target="#raw" type="button" role="tab" aria-controls="raw" aria-selected="false">
+                <i data-feather="code"></i> Raw Data
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="resultsTabContent">
+        <!-- Table View -->
+        <div class="tab-pane fade show active" id="table" role="tabpanel" aria-labelledby="table-tab">
+            <div class="card">
+                <div class="card-body">
+                    <div id="table-container">
+                        <div class="mb-3">
+                            <input type="text" class="form-control" id="table-search" placeholder="Filter results...">
+                        </div>
+                        <div class="table-responsive">
+                            <table class="results-table" id="results-table">
+                                <thead>
+                                    <tr id="results-table-header"></tr>
+                                </thead>
+                                <tbody id="results-table-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mind Map View -->
+        <div class="tab-pane fade" id="mindmap" role="tabpanel" aria-labelledby="mindmap-tab">
+            <div class="card">
+                <div class="card-body">
+                    <div id="mindmap-container"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TTP Mappings View -->
+        <div class="tab-pane fade" id="ttp" role="tabpanel" aria-labelledby="ttp-tab">
+            <div class="card">
+                <div class="card-body">
+                    <div id="ttp-container"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Raw Data View -->
+        <div class="tab-pane fade" id="raw" role="tabpanel" aria-labelledby="raw-tab">
+            <div class="card">
+                <div class="card-body">
+                    <pre class="raw-results" id="raw-results"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter/Pivot Modal -->
+    <div class="modal fade" id="pivotModal" tabindex="-1" aria-labelledby="pivotModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="pivotModalLabel">Refine Search</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="pivot-form">
+                        <div class="mb-3">
+                            <label for="pivot-field" class="form-label">Field</label>
+                            <input type="text" class="form-control" id="pivot-field" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label for="pivot-value" class="form-label">Value</label>
+                            <input type="text" class="form-control" id="pivot-value" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label for="pivot-operator" class="form-label">Operator</label>
+                            <select class="form-select" id="pivot-operator">
+                                <option value="equals">Equals (=)</option>
+                                <option value="contains">Contains (*)</option>
+                                <option value="startswith">Starts With</option>
+                                <option value="endswith">Ends With</option>
+                                <option value="notequals">Not Equals (!=)</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="pivot-query" class="form-label">New Query</label>
+                            <textarea class="form-control" id="pivot-query" rows="3"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="pivot-execute">Execute</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script>
+    // Initialize Feather icons
+    feather.replace();
+
+    // Global variables
+    let resultsData = [];
+    let mappingsData = {};
+    let mindmapData = {};
+    let d3Simulation = null;
+
+    // Fetch results data on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        // Get result ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const resultId = urlParams.get('id');
+        
+        if (resultId) {
+            fetchResults(resultId);
+        } else {
+            showNoResults("No result ID provided");
+        }
+    });
+
+    function fetchResults(resultId) {
+        fetch(`/api/results/${resultId}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Store results data
+                resultsData = data.results || [];
+                mappingsData = data.mappings || {};
+                mindmapData = data.mindmap || {};
+
+                // Update display
+                updateResultsCount();
+                populateTable();
+                updateRawView();
+                renderTTPMappings();
+                
+                // Init mind map when tab is shown
+                document.getElementById('mindmap-tab').addEventListener('shown.bs.tab', function (e) {
+                    initMindMap();
+                });
+            })
+            .catch(error => {
+                console.error('Error fetching results:', error);
+                showNoResults("Error loading results: " + error.message);
+            });
+    }
+
+    function showNoResults(message) {
+        document.getElementById('table-container').innerHTML = `<div class="no-results">${message}</div>`;
+        document.getElementById('mindmap-container').innerHTML = `<div class="no-results">${message}</div>`;
+        document.getElementById('raw-results').textContent = message;
+        document.getElementById('results-count').textContent = "No results found";
+    }
+
+    function updateResultsCount() {
+        const count = resultsData.length;
+        document.getElementById('results-count').textContent = `${count} result${count !== 1 ? 's' : ''} found`;
+    }
+
+    function populateTable() {
+        if (!resultsData.length) {
+            document.getElementById('table-container').innerHTML = '<div class="no-results">No results found</div>';
+            return;
+        }
+
+        // Get common fields from results
+        const fields = getCommonFields(resultsData);
+        
+        // Build table header
+        const headerRow = document.getElementById('results-table-header');
+        headerRow.innerHTML = '';
+        fields.forEach(field => {
+            const th = document.createElement('th');
+            th.textContent = field;
+            headerRow.appendChild(th);
+        });
+
+        // Build table body
+        const tableBody = document.getElementById('results-table-body');
+        tableBody.innerHTML = '';
+
+        resultsData.forEach((result, index) => {
+            const row = document.createElement('tr');
+            
+            fields.forEach(field => {
+                const td = document.createElement('td');
+                
+                if (result[field]) {
+                    const value = result[field];
+                    
+                    // Create a pivot link if value is not too long
+                    if (typeof value === 'string' && value.length < 100) {
+                        const pivotLink = document.createElement('a');
+                        pivotLink.className = 'pivot-link';
+                        pivotLink.textContent = value;
+                        pivotLink.onclick = () => openPivotModal(field, value);
+                        td.appendChild(pivotLink);
+                    } else {
+                        td.textContent = value;
+                    }
+                } else {
+                    td.textContent = '-';
+                }
+                
+                row.appendChild(td);
+            });
+            
+            tableBody.appendChild(row);
+        });
+
+        // Set up table search filtering
+        document.getElementById('table-search').addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            const rows = tableBody.querySelectorAll('tr');
+            
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(searchTerm) ? '' : 'none';
+            });
+        });
+    }
+
+    function getCommonFields(results) {
+        // Get all fields that appear in at least 50% of results
+        const fieldCounts = {};
+        const threshold = Math.max(1, Math.floor(results.length * 0.5));
+        
+        results.forEach(result => {
+            Object.keys(result).forEach(field => {
+                fieldCounts[field] = (fieldCounts[field] || 0) + 1;
+            });
+        });
+        
+        // Sort fields by count
+        return Object.keys(fieldCounts)
+            .filter(field => fieldCounts[field] >= threshold)
+            // Prioritize some common useful fields
+            .sort((a, b) => {
+                const priorityFields = [
+                    'host', 'source', 'sourcetype', 'CommandLine', 'Image', 
+                    'User', 'time', 'timestamp', 'EventID'
+                ];
+                
+                const aPriority = priorityFields.indexOf(a);
+                const bPriority = priorityFields.indexOf(b);
+                
+                if (aPriority !== -1 && bPriority !== -1) {
+                    return aPriority - bPriority;
+                }
+                
+                if (aPriority !== -1) return -1;
+                if (bPriority !== -1) return 1;
+                
+                return fieldCounts[b] - fieldCounts[a];
+            })
+            // Limit to 10 fields
+            .slice(0, 10);
+    }
+
+    function updateRawView() {
+        const rawResults = document.getElementById('raw-results');
+        
+        if (!resultsData.length) {
+            rawResults.textContent = "No results found";
+            return;
+        }
+        
+        let text = "";
+        
+        resultsData.forEach((result, index) => {
+            text += `--- Result #${index + 1} ---\n`;
+            
+            Object.entries(result).forEach(([key, value]) => {
+                text += `${key} = ${value}\n`;
+            });
+            
+            text += "\n";
+        });
+        
+        rawResults.textContent = text;
+    }
+
+    function renderTTPMappings() {
+        const container = document.getElementById('ttp-container');
+        
+        if (!mappingsData || !mappingsData.mappings || !mappingsData.mappings.length) {
+            container.innerHTML = '<div class="no-results">No TTP mappings found</div>';
+            return;
+        }
+        
+        let html = '<div class="table-responsive"><table class="results-table mt-3">';
+        html += '<thead><tr><th>Result #</th><th>MITRE Technique</th><th>Confidence</th><th>Tactics</th></tr></thead><tbody>';
+        
+        mappingsData.mappings.forEach((mapping) => {
+            const resultIndex = mapping.result_index;
+            
+            if (mapping.matches && mapping.matches.length) {
+                mapping.matches.forEach((match) => {
+                    const confidence = match.similarity_score;
+                    let confidenceClass = 'low-match';
+                    
+                    if (confidence >= 0.7) confidenceClass = 'high-match';
+                    else if (confidence >= 0.4) confidenceClass = 'medium-match';
+                    
+                    html += `<tr>`;
+                    html += `<td>${resultIndex + 1}</td>`;
+                    html += `<td>
+                                <a href="https://attack.mitre.org/techniques/${match.technique_id.replace('T', '')}" target="_blank">
+                                    ${match.technique_id}: ${match.technique_name}
+                                </a>
+                             </td>`;
+                    html += `<td><span class="ttp-badge ${confidenceClass}">${Math.round(confidence * 100)}%</span></td>`;
+                    html += `<td>${match.tactics.join(', ')}</td>`;
+                    html += `</tr>`;
+                });
+            } else {
+                html += `<tr><td>${resultIndex + 1}</td><td colspan="3">No matches found</td></tr>`;
+            }
+        });
+        
+        html += '</tbody></table></div>';
+        container.innerHTML = html;
+    }
+
+    function initMindMap() {
+        // Clear any existing visualization
+        document.getElementById('mindmap-container').innerHTML = '';
+        
+        if (!mindmapData || !mindmapData.nodes || !mindmapData.nodes.length) {
+            document.getElementById('mindmap-container').innerHTML = '<div class="no-results">No data available for mind map visualization</div>';
+            return;
+        }
+        
+        // Set up mind map visualization
+        const width = document.getElementById('mindmap-container').clientWidth;
+        const height = 600;
+        
+        // Create SVG
+        const svg = d3.select('#mindmap-container')
+            .append('svg')
+            .attr('width', width)
+            .attr('height', height);
+            
+        // Create groups for links and nodes
+        const g = svg.append('g');
+        const linkGroup = g.append('g').attr('class', 'links');
+        const nodeGroup = g.append('g').attr('class', 'nodes');
+        
+        // Create zoom behavior
+        const zoom = d3.zoom()
+            .scaleExtent([0.1, 4])
+            .on('zoom', (event) => {
+                g.attr('transform', event.transform);
+            });
+            
+        svg.call(zoom);
+        
+        // Center the view
+        svg.call(zoom.transform, d3.zoomIdentity.translate(width / 2, height / 2));
+        
+        // Create the simulation
+        d3Simulation = d3.forceSimulation()
+            .force('link', d3.forceLink().id(d => d.id).distance(100))
+            .force('charge', d3.forceManyBody().strength(-300))
+            .force('center', d3.forceCenter(0, 0))
+            .force('collide', d3.forceCollide(30));
+            
+        // Create the links
+        const links = linkGroup
+            .selectAll('line')
+            .data(mindmapData.links)
+            .enter()
+            .append('line')
+            .attr('class', 'link')
+            .style('stroke-width', d => d.value);
+            
+        // Create the nodes
+        const nodes = nodeGroup
+            .selectAll('.node')
+            .data(mindmapData.nodes)
+            .enter()
+            .append('g')
+            .attr('class', d => `node ${d.group}`)
+            .call(d3.drag()
+                .on('start', dragStarted)
+                .on('drag', dragged)
+                .on('end', dragEnded));
+                
+        // Add circles to nodes
+        nodes.append('circle')
+            .attr('r', d => d.group === 'root' ? 20 : (d.group === 'technique' ? 15 : 10))
+            .style('fill', d => {
+                if (d.group === 'technique') {
+                    // Color based on confidence score if available
+                    const score = d.score || 0;
+                    if (score >= 0.7) return '#dc3545'; // High match (danger)
+                    if (score >= 0.4) return '#ffc107'; // Medium match (warning)
+                    return '#0dcaf0'; // Low match (info)
+                }
+            });
+            
+        // Add text to nodes
+        nodes.append('text')
+            .attr('dx', 15)
+            .attr('dy', 5)
+            .text(d => d.label)
+            .style('font-weight', d => d.group === 'root' ? 'bold' : 'normal');
+            
+        // Handle clicks on nodes
+        nodes.on('click', function(event, d) {
+            if (d.group === 'value') {
+                openPivotModal(d.field, d.label);
+            }
+        });
+        
+        // Add tooltips
+        nodes.append('title')
+            .text(d => d.label);
+            
+        // Start the simulation
+        d3Simulation
+            .nodes(mindmapData.nodes)
+            .on('tick', ticked);
+            
+        d3Simulation.force('link')
+            .links(mindmapData.links);
+            
+        // Simulation tick function
+        function ticked() {
+            links
+                .attr('x1', d => d.source.x)
+                .attr('y1', d => d.source.y)
+                .attr('x2', d => d.target.x)
+                .attr('y2', d => d.target.y);
+                
+            nodes
+                .attr('transform', d => `translate(${d.x},${d.y})`);
+        }
+        
+        // Drag functions
+        function dragStarted(event, d) {
+            if (!event.active) d3Simulation.alphaTarget(0.3).restart();
+            d.fx = d.x;
+            d.fy = d.y;
+        }
+        
+        function dragged(event, d) {
+            d.fx = event.x;
+            d.fy = event.y;
+        }
+        
+        function dragEnded(event, d) {
+            if (!event.active) d3Simulation.alphaTarget(0);
+            d.fx = null;
+            d.fy = null;
+        }
+    }
+
+    function openPivotModal(field, value) {
+        // Set pivot modal fields
+        document.getElementById('pivot-field').value = field;
+        document.getElementById('pivot-value').value = value;
+        
+        // Generate the new query
+        updatePivotQuery();
+        
+        // Set operator change listener
+        document.getElementById('pivot-operator').addEventListener('change', updatePivotQuery);
+        
+        // Show the modal
+        const modal = new bootstrap.Modal(document.getElementById('pivotModal'));
+        modal.show();
+    }
+
+    function updatePivotQuery() {
+        const field = document.getElementById('pivot-field').value;
+        const value = document.getElementById('pivot-value').value;
+        const operator = document.getElementById('pivot-operator').value;
+        
+        let queryComponent = '';
+        
+        switch (operator) {
+            case 'equals':
+                queryComponent = `${field}="${value}"`;
+                break;
+            case 'contains':
+                queryComponent = `${field}=*${value}*`;
+                break;
+            case 'startswith':
+                queryComponent = `${field}=${value}*`;
+                break;
+            case 'endswith':
+                queryComponent = `${field}=*${value}`;
+                break;
+            case 'notequals':
+                queryComponent = `${field}!="${value}"`;
+                break;
+        }
+        
+        document.getElementById('pivot-query').value = queryComponent;
+    }
+
+    // Set up pivot execution
+    document.getElementById('pivot-execute').addEventListener('click', function() {
+        const query = document.getElementById('pivot-query').value;
+        
+        if (query) {
+            window.location.href = `/direct_query?query=${encodeURIComponent(query)}`;
+        }
+    });
+
+    // JSON Export functionality
+    document.getElementById('export-json').addEventListener('click', function() {
+        if (!resultsData.length) return;
+        
+        const jsonStr = JSON.stringify(resultsData, null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'splunk_results.json';
+        document.body.appendChild(a);
+        a.click();
+        
+        setTimeout(function() {
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        }, 0);
+    });
+</script>
+{% endblock %}

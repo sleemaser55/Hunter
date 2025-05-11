@@ -34,6 +34,20 @@
                             </div>
                         </div>
                         <div class="col-md-4">
+                            <label for="time-preset" class="form-label">Time Range Preset</label>
+                            <select class="form-select" id="time-preset">
+                                <option value="custom">Custom</option>
+                                <option value="realtime">Real-time (rt)</option>
+                                <option value="15m">Last 15 minutes</option>
+                                <option value="1h">Last hour</option>
+                                <option value="4h">Last 4 hours</option>
+                                <option value="24h" selected>Last 24 hours</option>
+                                <option value="7d">Last 7 days</option>
+                                <option value="30d">Last 30 days</option>
+                                <option value="alltime">All time</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
                             <label for="earliest-time" class="form-label">Earliest Time</label>
                             <input type="text" class="form-control" id="earliest-time" value="-24h">
                             <div class="form-text">e.g., -24h, -7d, 2023-01-01T00:00:00</div>
@@ -151,8 +165,59 @@
         
         // Toggle time range inputs based on checkbox
         useTimeRange.addEventListener('change', function() {
-            earliestTime.disabled = !this.checked;
-            latestTime.disabled = !this.checked;
+            const disabled = !this.checked;
+            document.getElementById('time-preset').disabled = disabled;
+            earliestTime.disabled = disabled;
+            latestTime.disabled = disabled;
+        });
+        
+        // Handle time preset changes
+        document.getElementById('time-preset').addEventListener('change', function() {
+            const preset = this.value;
+            
+            // Set earliest and latest time based on preset
+            switch(preset) {
+                case 'realtime':
+                    earliestTime.value = 'rt';
+                    latestTime.value = 'rt+1m';
+                    break;
+                case '15m':
+                    earliestTime.value = '-15m';
+                    latestTime.value = 'now';
+                    break;
+                case '1h':
+                    earliestTime.value = '-1h';
+                    latestTime.value = 'now';
+                    break;
+                case '4h':
+                    earliestTime.value = '-4h';
+                    latestTime.value = 'now';
+                    break;
+                case '24h':
+                    earliestTime.value = '-24h';
+                    latestTime.value = 'now';
+                    break;
+                case '7d':
+                    earliestTime.value = '-7d';
+                    latestTime.value = 'now';
+                    break;
+                case '30d':
+                    earliestTime.value = '-30d';
+                    latestTime.value = 'now';
+                    break;
+                case 'alltime':
+                    earliestTime.value = '0';
+                    latestTime.value = 'now';
+                    break;
+                case 'custom':
+                    // Don't change the values, let user set them
+                    break;
+            }
+            
+            // Disable direct editing if using preset (except custom)
+            const disableInputs = preset !== 'custom';
+            earliestTime.readOnly = disableInputs;
+            latestTime.readOnly = disableInputs;
         });
         
         // Handle query form submission
@@ -233,6 +298,25 @@
                 resultCount.textContent = data.results.length;
                 if (data.total_result_count && data.total_result_count > data.results.length) {
                     resultCount.textContent += ` (limited from ${data.total_result_count})`;
+                }
+                
+                // Add button to view results in mind map visualization if available
+                if (data.result_id) {
+                    // Add a visualization button
+                    const viewButtonContainer = document.createElement('div');
+                    viewButtonContainer.className = 'mb-3';
+                    viewButtonContainer.innerHTML = `
+                        <a href="/results?id=${data.result_id}" class="btn btn-primary">
+                            <i data-feather="share-2"></i> View with Mind Map & TTP Mapping
+                        </a>
+                    `;
+                    
+                    // Insert button before the results table
+                    const resultsCard = document.querySelector('.card');
+                    resultsCard.parentNode.insertBefore(viewButtonContainer, resultsCard);
+                    
+                    // Initialize Feather icons for the new button
+                    feather.replace();
                 }
                 
                 // Get all fields from results
