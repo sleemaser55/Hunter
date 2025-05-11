@@ -368,38 +368,99 @@
             container.innerHTML = '';
             const visualization = data.visualization;
             
-            // Create a network
+            // Create a network with improved styles for better visibility
             const options = {
                 nodes: {
                     shape: 'dot',
-                    size: 16,
+                    size: 20,
                     font: {
-                        size: 12,
-                        face: 'Tahoma'
+                        size: 14,
+                        face: 'Tahoma',
+                        color: '#ffffff',
+                        bold: true
                     },
                     borderWidth: 2
                 },
                 edges: {
-                    width: 1,
+                    width: 2,
+                    color: {
+                        color: '#88bbdd',
+                        highlight: '#00aaff'
+                    },
                     smooth: {
                         type: 'continuous'
                     }
                 },
+                groups: {
+                    center: {
+                        color: {
+                            background: '#5c6bc0',
+                            border: '#3f51b5',
+                            highlight: {
+                                background: '#3f51b5',
+                                border: '#283593'
+                            }
+                        },
+                        font: {
+                            color: '#ffffff',
+                            size: 16,
+                            face: 'Tahoma',
+                            bold: true
+                        }
+                    },
+                    field: {
+                        shape: 'diamond',
+                        color: {
+                            background: '#43a047',
+                            border: '#2e7d32',
+                            highlight: {
+                                background: '#2e7d32',
+                                border: '#1b5e20'
+                            }
+                        },
+                        font: {
+                            color: '#ffffff',
+                            size: 14
+                        }
+                    },
+                    value: {
+                        shape: 'box',
+                        color: {
+                            background: '#ef5350',
+                            border: '#e53935',
+                            highlight: {
+                                background: '#e53935',
+                                border: '#c62828'
+                            }
+                        },
+                        font: {
+                            color: '#ffffff'
+                        }
+                    }
+                },
                 physics: {
                     enabled: layout === 'physics',
-                    stabilization: false,
-                    solver: 'forceAtlas2Based'
+                    stabilization: true,
+                    solver: 'forceAtlas2Based',
+                    forceAtlas2Based: {
+                        gravitationalConstant: -100,
+                        springLength: 150,
+                        springConstant: 0.08
+                    }
                 },
                 layout: {
                     hierarchical: {
                         enabled: layout === 'hierarchical',
                         direction: 'UD',
-                        sortMethod: 'directed'
+                        sortMethod: 'directed',
+                        nodeSpacing: 200,
+                        levelSeparation: 150
                     }
                 },
                 interaction: {
                     navigationButtons: true,
-                    keyboard: true
+                    keyboard: true,
+                    hover: true
                 }
             };
             
@@ -458,67 +519,127 @@
             container.innerHTML = '';
             const visualization = data.visualization;
             
-            // Create a network
+            // Create a network with improved styles for TTP mapping
             const options = {
                 nodes: {
                     shape: 'dot',
-                    size: 20,
+                    size: 25,
                     font: {
-                        size: 12,
-                        face: 'Tahoma'
+                        size: 16,
+                        face: 'Tahoma',
+                        color: '#ffffff',
+                        bold: true
                     },
-                    borderWidth: 2
+                    borderWidth: 3
                 },
                 edges: {
-                    width: 2,
+                    width: 3,
+                    color: {
+                        color: '#88bbdd',
+                        highlight: '#00aaff'
+                    },
                     smooth: {
                         type: 'continuous'
                     },
                     arrows: {
                         to: {
                             enabled: true,
-                            scaleFactor: 0.5
+                            scaleFactor: 0.6
                         }
                     }
                 },
                 groups: {
+                    results: {
+                        shape: 'hexagon',
+                        size: 35,
+                        color: {
+                            background: '#8e44ad',
+                            border: '#6c3483',
+                            highlight: {
+                                background: '#9b59b6',
+                                border: '#8e44ad'
+                            }
+                        },
+                        font: {
+                            color: '#ffffff',
+                            size: 18
+                        }
+                    },
                     tactic: {
                         shape: 'diamond',
+                        size: 30,
                         color: {
-                            background: '#d62728',
-                            border: '#a91b1b'
+                            background: '#e74c3c',
+                            border: '#c0392b',
+                            highlight: {
+                                background: '#f39c12',
+                                border: '#d35400'
+                            }
+                        },
+                        font: {
+                            color: '#ffffff',
+                            size: 16,
+                            bold: true
                         }
                     },
                     technique: {
                         shape: 'dot',
+                        size: 25,
                         color: {
-                            background: '#1f77b4',
-                            border: '#0c4c8a'
+                            background: '#3498db',
+                            border: '#2980b9',
+                            highlight: {
+                                background: '#2ecc71',
+                                border: '#27ae60'
+                            }
+                        },
+                        font: {
+                            color: '#ffffff',
+                            size: 14,
+                            bold: true
                         }
                     },
                     event: {
                         shape: 'square',
+                        size: 20,
                         color: {
-                            background: '#2ca02c',
-                            border: '#1a7a1a'
+                            background: '#2ecc71',
+                            border: '#27ae60',
+                            highlight: {
+                                background: '#1abc9c',
+                                border: '#16a085'
+                            }
+                        },
+                        font: {
+                            color: '#ffffff'
                         }
                     }
                 },
                 physics: {
                     enabled: layout === 'physics',
                     stabilization: true,
-                    solver: 'forceAtlas2Based'
+                    solver: 'forceAtlas2Based',
+                    forceAtlas2Based: {
+                        gravitationalConstant: -150,
+                        springLength: 200,
+                        springConstant: 0.08,
+                        avoidOverlap: 1
+                    }
                 },
                 layout: {
                     hierarchical: {
                         enabled: layout === 'hierarchical',
                         direction: 'UD',
-                        sortMethod: 'directed'
+                        sortMethod: 'directed',
+                        nodeSpacing: 250,
+                        levelSeparation: 200
                     }
                 },
                 interaction: {
                     navigationButtons: true,
-                    keyboard: true
+                    keyboard: true,
+                    hover: true,
+                    tooltipDelay: 200
                 }
             };
             
