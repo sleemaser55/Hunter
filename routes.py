@@ -870,10 +870,16 @@ def api_visualize_timeline(result_id):
             data = request.json or {}
             entity_field = data.get('entity', None)
             timestamp_field = data.get('timestamp', '_time')
+            visualization_mode = data.get('mode', 'grouped')
+            branch_fields = data.get('branch_fields', [])
+            connection_fields = data.get('connection_fields', [])
         else:
             # For GET request, use default settings
             entity_field = None
             timestamp_field = '_time'
+            visualization_mode = 'grouped'
+            branch_fields = []
+            connection_fields = []
         
         # Find timestamp fields
         timestamp_fields = ['_time']
@@ -882,29 +888,46 @@ def api_visualize_timeline(result_id):
                 if 'time' in field.lower() and field not in timestamp_fields:
                     timestamp_fields.append(field)
         
-        # Detect entity fields (fields with repeating values that could be used for grouping)
-        entity_fields = []
+        # Detect all available fields for different visualizations
+        all_fields = set()
         field_values = {}
         
         for result in results:
             for field, value in result.items():
-                # Skip empty values, internal fields, and timestamp fields
-                if not value or field.startswith('_') or field in timestamp_fields:
+                # Skip raw event data and null values
+                if field == '_raw' or not value:
                     continue
                 
-                # Track field values
-                if field not in field_values:
-                    field_values[field] = set()
+                # Add to all fields set
+                all_fields.add(field)
                 
-                field_values[field].add(str(value))
+                # Track field values for entity detection (skip internal and timestamp fields)
+                if not field.startswith('_') and field not in timestamp_fields:
+                    if field not in field_values:
+                        field_values[field] = set()
+                    
+                    # Add string value
+                    try:
+                        field_values[field].add(str(value))
+                    except:
+                        # Skip complex values that can't be converted to strings
+                        pass
         
         # Fields with a reasonable number of distinct values could be entities
+        entity_fields = []
         for field, values in field_values.items():
             if 2 <= len(values) <= 10:  # Arbitrary threshold
                 entity_fields.append(field)
         
-        # Generate visualization
-        visualization = visualizer.generate_timeline(results, timestamp_field, entity_field)
+        # Generate visualization based on mode
+        visualization = visualizer.generate_timeline(
+            results, 
+            timestamp_field, 
+            entity_field,
+            visualization_mode,
+            branch_fields,
+            connection_fields
+        )
         
         return jsonify({
             'status': 'success',
@@ -912,7 +935,9 @@ def api_visualize_timeline(result_id):
             'available_timestamps': timestamp_fields,
             'selected_timestamp': timestamp_field,
             'available_entities': entity_fields,
-            'selected_entity': entity_field
+            'selected_entity': entity_field,
+            'available_fields': sorted(list(all_fields)),
+            'selected_mode': visualization_mode
         })
         
     except Exception as e:

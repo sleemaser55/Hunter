@@ -126,7 +126,7 @@
         <div class="tab-pane fade" id="nav-timeline" role="tabpanel" aria-labelledby="nav-timeline-tab">
             <div class="row mb-3">
                 <div class="col-md-3">
-                    <div class="card">
+                    <div class="card mb-3">
                         <div class="card-header">
                             <h5>Timeline Options</h5>
                         </div>
@@ -137,13 +137,79 @@
                                 <div class="form-text">Select the field containing timestamp information</div>
                             </div>
                             <div class="mb-3">
-                                <label for="timeline-entity" class="form-label">Entity Field</label>
-                                <select id="timeline-entity" class="form-select">
-                                    <option value="">None (Group all events)</option>
+                                <label for="timeline-mode" class="form-label">Timeline Mode</label>
+                                <select id="timeline-mode" class="form-select">
+                                    <option value="grouped">Grouped Timeline</option>
+                                    <option value="branch">Field Branch Timeline</option>
+                                    <option value="ungrouped">Non-Grouped Timeline</option>
                                 </select>
-                                <div class="form-text">Select field to group events by (e.g., host, user)</div>
+                                <div class="form-text">Select how the timeline should be displayed</div>
+                            </div>
+                            <div id="timeline-grouped-options">
+                                <div class="mb-3">
+                                    <label for="timeline-entity" class="form-label">Entity Field</label>
+                                    <select id="timeline-entity" class="form-select">
+                                        <option value="">None (Group all events)</option>
+                                    </select>
+                                    <div class="form-text">Select field to group events by (e.g., host, user)</div>
+                                </div>
+                            </div>
+                            <div id="timeline-branch-options" style="display: none;">
+                                <div class="mb-3">
+                                    <label for="timeline-branches" class="form-label">Branch Fields</label>
+                                    <select id="timeline-branches" class="form-select" multiple size="5">
+                                    </select>
+                                    <div class="form-text">Select fields to create timeline branches</div>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="timeline-connection-fields" class="form-label">Connection Fields</label>
+                                <select id="timeline-connection-fields" class="form-select" multiple size="5">
+                                </select>
+                                <div class="form-text">Select fields to connect related nodes</div>
                             </div>
                             <button id="update-timeline" class="btn btn-primary w-100">Update Timeline</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Suspicious Nodes List -->
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h5>Suspicious Nodes</h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="suspicious-nodes-list" class="list-group mb-3" style="max-height: 200px; overflow-y: auto;">
+                                <div class="list-group-item text-center text-muted">No nodes marked as suspicious yet</div>
+                            </div>
+                            <div class="d-grid gap-2">
+                                <button id="hunt-suspicious" class="btn btn-danger" disabled>Hunt for Suspicious Nodes</button>
+                                <button id="clear-suspicious" class="btn btn-outline-secondary" disabled>Clear List</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Whitelist Management -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h5>Whitelist</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label for="whitelist-field" class="form-label">Field</label>
+                                <select id="whitelist-field" class="form-select">
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="whitelist-value" class="form-label">Value</label>
+                                <input type="text" id="whitelist-value" class="form-control">
+                            </div>
+                            <div class="d-grid gap-2">
+                                <button id="add-whitelist" class="btn btn-secondary">Add to Whitelist</button>
+                            </div>
+                            <hr>
+                            <div id="whitelist-entries" class="list-group" style="max-height: 200px; overflow-y: auto;">
+                                <div class="list-group-item text-center text-muted">No whitelist entries</div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -270,6 +336,45 @@
         document.getElementById('ttp-confidence').addEventListener('input', function() {
             document.getElementById('ttp-confidence-value').textContent = this.value + '%';
         });
+        
+        // Timeline mode change
+        const timelineMode = document.getElementById('timeline-mode');
+        if (timelineMode) {
+            timelineMode.addEventListener('change', function() {
+                const mode = this.value;
+                const groupedOptions = document.getElementById('timeline-grouped-options');
+                const branchOptions = document.getElementById('timeline-branch-options');
+                
+                if (mode === 'grouped') {
+                    groupedOptions.style.display = 'block';
+                    branchOptions.style.display = 'none';
+                } else if (mode === 'branch') {
+                    groupedOptions.style.display = 'none';
+                    branchOptions.style.display = 'block';
+                } else if (mode === 'ungrouped') {
+                    groupedOptions.style.display = 'none';
+                    branchOptions.style.display = 'none';
+                }
+            });
+        }
+        
+        // Suspicious nodes management
+        const huntSuspicious = document.getElementById('hunt-suspicious');
+        const clearSuspicious = document.getElementById('clear-suspicious');
+        
+        if (huntSuspicious) {
+            huntSuspicious.addEventListener('click', huntForSuspiciousNodes);
+        }
+        
+        if (clearSuspicious) {
+            clearSuspicious.addEventListener('click', clearSuspiciousNodes);
+        }
+        
+        // Whitelist management
+        const addWhitelistBtn = document.getElementById('add-whitelist');
+        if (addWhitelistBtn) {
+            addWhitelistBtn.addEventListener('click', addWhitelistEntry);
+        }
 
         // Fullscreen buttons
         document.getElementById('pivot-fullscreen').addEventListener('click', function() {
@@ -377,7 +482,11 @@
                         size: 14,
                         face: 'Tahoma',
                         color: '#ffffff',
-                        bold: true
+                        bold: {
+                            color: '#ffffff',
+                            size: 14,
+                            face: 'Tahoma'
+                        }
                     },
                     borderWidth: 2
                 },
@@ -405,7 +514,10 @@
                             color: '#ffffff',
                             size: 16,
                             face: 'Tahoma',
-                            bold: true
+                            bold: {
+                                color: '#ffffff',
+                                face: 'Tahoma'
+                            }
                         }
                     },
                     field: {
@@ -579,7 +691,11 @@
                         font: {
                             color: '#ffffff',
                             size: 16,
-                            bold: true
+                            face: 'Tahoma',
+                            bold: {
+                                color: '#ffffff',
+                                face: 'Tahoma'
+                            }
                         }
                     },
                     technique: {
@@ -596,7 +712,11 @@
                         font: {
                             color: '#ffffff',
                             size: 14,
-                            bold: true
+                            face: 'Tahoma',
+                            bold: {
+                                color: '#ffffff',
+                                face: 'Tahoma'
+                            }
                         }
                     },
                     event: {
@@ -671,6 +791,9 @@
         const container = document.getElementById('timeline-visualization');
         const timestampSelect = document.getElementById('timeline-timestamp');
         const entitySelect = document.getElementById('timeline-entity');
+        const modeSelect = document.getElementById('timeline-mode');
+        const branchesSelect = document.getElementById('timeline-branches');
+        const connectionFieldsSelect = document.getElementById('timeline-connection-fields');
         
         // Show loading
         container.innerHTML = '<div class="d-flex justify-content-center align-items-center h-100"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
@@ -678,6 +801,27 @@
         // Get selected values
         const timestamp = timestampSelect.value || '_time';
         const entity = entitySelect.value || null;
+        const mode = modeSelect.value || 'grouped';
+        
+        // Get selected branch fields (for branch mode)
+        const branchFields = [];
+        if (mode === 'branch' && branchesSelect) {
+            for (let i = 0; i < branchesSelect.options.length; i++) {
+                if (branchesSelect.options[i].selected) {
+                    branchFields.push(branchesSelect.options[i].value);
+                }
+            }
+        }
+        
+        // Get connection fields
+        const connectionFields = [];
+        if (connectionFieldsSelect) {
+            for (let i = 0; i < connectionFieldsSelect.options.length; i++) {
+                if (connectionFieldsSelect.options[i].selected) {
+                    connectionFields.push(connectionFieldsSelect.options[i].value);
+                }
+            }
+        }
         
         // Load data from API
         fetch(`/api/visualize/timeline/${resultId}`, {
@@ -687,7 +831,10 @@
             },
             body: JSON.stringify({
                 timestamp: timestamp,
-                entity: entity
+                entity: entity,
+                mode: mode,
+                branch_fields: branchFields,
+                connection_fields: connectionFields
             })
         })
         .then(response => response.json())
@@ -698,7 +845,7 @@
             }
             
             // Update select options if needed
-            if (timestampSelect.options.length === 0) {
+            if (timestampSelect.options.length === 0 && data.available_timestamps) {
                 data.available_timestamps.forEach(field => {
                     const option = document.createElement('option');
                     option.value = field;
@@ -708,7 +855,7 @@
                 });
             }
             
-            if (entitySelect.options.length === 1) {
+            if (entitySelect.options.length === 1 && data.available_entities) {
                 data.available_entities.forEach(field => {
                     const option = document.createElement('option');
                     option.value = field;
@@ -718,46 +865,783 @@
                 });
             }
             
-            // Create visualization
+            // Update fields for branch and connection if available
+            if (branchesSelect && branchesSelect.options.length === 0 && data.available_fields) {
+                data.available_fields.forEach(field => {
+                    const option = document.createElement('option');
+                    option.value = field;
+                    option.text = field;
+                    branchesSelect.appendChild(option);
+                });
+            }
+            
+            if (connectionFieldsSelect && connectionFieldsSelect.options.length === 0 && data.available_fields) {
+                data.available_fields.forEach(field => {
+                    const option = document.createElement('option');
+                    option.value = field;
+                    option.text = field;
+                    connectionFieldsSelect.appendChild(option);
+                });
+            }
+            
+            // Clear the container
             container.innerHTML = '';
-            const visualization = data.visualization;
             
-            // Create timeline items
-            const items = new vis.DataSet(visualization.items);
-            
-            // Configure timeline options
-            const options = {
-                stack: true,
-                stackSubgroups: true,
-                orientation: 'top',
-                minHeight: '500px',
-                zoomMin: 1000 * 60, // 1 minute
-                zoomMax: 1000 * 60 * 60 * 24 * 31, // 31 days
-                tooltip: {
-                    followMouse: true,
-                    overflowMethod: 'cap'
-                }
-            };
-            
-            // Create timeline
-            timeline = new vis.Timeline(container, items, options);
-            
-            // Add click event
-            timeline.on('click', function(properties) {
-                if (properties.item) {
-                    const item = items.get(properties.item);
-                    if (item && item.event) {
-                        const eventData = JSON.stringify(item.event, null, 2);
-                        alert(`Event Details:\n${eventData}`);
-                    }
-                }
-            });
+            // Handle different visualization modes
+            if (mode === 'ungrouped' || mode === 'branch') {
+                // For advanced timeline modes, use vis-network
+                createTimelineNetwork(container, data.visualization);
+            } else {
+                // Standard grouped timeline using vis-timeline
+                createStandardTimeline(container, data.visualization);
+            }
         })
         .catch(error => {
             container.innerHTML = `<div class="alert alert-danger">Error loading visualization: ${error.message}</div>`;
         });
     }
+    
+    function createStandardTimeline(container, visualization) {
+        // Create timeline items
+        const items = new vis.DataSet(visualization.items);
+        const groups = visualization.groups || null;
+        
+        // Configure timeline options
+        const options = {
+            stack: true,
+            stackSubgroups: true,
+            orientation: 'top',
+            minHeight: '500px',
+            zoomMin: 1000 * 60, // 1 minute
+            zoomMax: 1000 * 60 * 60 * 24 * 31, // 31 days
+            tooltip: {
+                followMouse: true,
+                overflowMethod: 'cap'
+            },
+            template: function(item) {
+                // Enhanced tooltip with HTML
+                if (item.content) {
+                    return `<div class="vis-timeline-tooltip">
+                        <div class="tooltip-title">${item.content}</div>
+                        ${item.description ? `<div class="tooltip-description">${item.description}</div>` : ''}
+                    </div>`;
+                }
+                return item.content;
+            }
+        };
+        
+        // Create timeline
+        timeline = new vis.Timeline(container, items, groups, options);
+        
+        // Add click event for item details
+        timeline.on('click', function(properties) {
+            if (properties.item) {
+                const item = items.get(properties.item);
+                if (item) {
+                    showEventDetails(item);
+                }
+            }
+        });
+        
+        // Add contextmenu event for actions
+        timeline.on('contextmenu', function(properties) {
+            if (properties.item) {
+                const item = items.get(properties.item);
+                if (item) {
+                    properties.event.preventDefault();
+                    showEventContextMenu(item, { x: properties.event.clientX, y: properties.event.clientY });
+                }
+            }
+        });
+    }
+    
+    function createTimelineNetwork(container, visualization) {
+        // Create nodes and edges datasets
+        const nodes = new vis.DataSet(visualization.nodes || []);
+        const edges = new vis.DataSet(visualization.edges || []);
+        
+        // Network configuration
+        const options = {
+            nodes: {
+                shape: 'dot',
+                size: 16,
+                font: {
+                    size: 12,
+                    color: '#ffffff',
+                    face: 'Tahoma',
+                    bold: {
+                        color: '#ffffff',
+                        face: 'Tahoma'
+                    }
+                },
+                borderWidth: 2
+            },
+            edges: {
+                width: 2,
+                color: {
+                    color: '#88bbdd',
+                    highlight: '#00aaff'
+                },
+                arrows: {
+                    to: {
+                        enabled: true,
+                        scaleFactor: 0.5
+                    }
+                }
+            },
+            physics: {
+                enabled: true,
+                stabilization: true,
+                solver: 'forceAtlas2Based',
+                forceAtlas2Based: {
+                    gravitationalConstant: -50,
+                    springLength: 250,
+                    springConstant: 0.05,
+                    avoidOverlap: 0.5
+                }
+            },
+            groups: {
+                event: {
+                    shape: 'dot',
+                    color: {
+                        background: '#3498db',
+                        border: '#2980b9',
+                        highlight: {
+                            background: '#2ecc71',
+                            border: '#27ae60'
+                        }
+                    }
+                },
+                process: {
+                    shape: 'square',
+                    color: {
+                        background: '#e74c3c',
+                        border: '#c0392b',
+                        highlight: {
+                            background: '#f39c12',
+                            border: '#d35400'
+                        }
+                    }
+                },
+                user: {
+                    shape: 'diamond',
+                    color: {
+                        background: '#9b59b6',
+                        border: '#8e44ad',
+                        highlight: {
+                            background: '#673ab7',
+                            border: '#512da8'
+                        }
+                    }
+                },
+                host: {
+                    shape: 'hexagon',
+                    color: {
+                        background: '#2ecc71',
+                        border: '#27ae60',
+                        highlight: {
+                            background: '#1abc9c',
+                            border: '#16a085'
+                        }
+                    }
+                },
+                file: {
+                    shape: 'triangle',
+                    color: {
+                        background: '#f39c12',
+                        border: '#e67e22',
+                        highlight: {
+                            background: '#f1c40f',
+                            border: '#f39c12'
+                        }
+                    }
+                },
+                network: {
+                    shape: 'dot',
+                    color: {
+                        background: '#3498db',
+                        border: '#2980b9',
+                        highlight: {
+                            background: '#3498db',
+                            border: '#2980b9'
+                        }
+                    }
+                }
+            },
+            interaction: {
+                navigationButtons: true,
+                keyboard: true,
+                hover: true,
+                tooltipDelay: 200,
+                multiselect: false
+            },
+            layout: {
+                improvedLayout: true,
+                hierarchical: {
+                    enabled: false
+                }
+            }
+        };
+        
+        // Create network
+        timeline = new vis.Network(container, { nodes, edges }, options);
+        
+        // Add click event for node details
+        timeline.on('doubleClick', function(params) {
+            if (params.nodes.length > 0) {
+                const nodeId = params.nodes[0];
+                const node = nodes.get(nodeId);
+                if (node) {
+                    showNodeDetails(node);
+                }
+            }
+        });
+        
+        // Add right-click event for context menu
+        timeline.on('oncontext', function(params) {
+            params.event.preventDefault();
+            const nodeId = timeline.getNodeAt(params.pointer.DOM);
+            
+            if (nodeId) {
+                const node = nodes.get(nodeId);
+                showNodeContextMenu(node, { x: params.event.clientX, y: params.event.clientY });
+            }
+        });
+    }
+    
+    function showEventDetails(item) {
+        // Create a modal with event details
+        const modalTitle = document.getElementById('visualization-modal-title');
+        const modalBody = document.getElementById('visualization-modal-body');
+        
+        modalTitle.textContent = item.content || 'Event Details';
+        
+        let details = '<div class="table-responsive"><table class="table table-striped">';
+        
+        // Add all item properties that aren't internal
+        for (const key in item) {
+            if (!key.startsWith('_') && key !== 'content' && key !== 'start' && key !== 'end' && key !== 'group') {
+                if (typeof item[key] === 'object' && item[key] !== null) {
+                    details += `<tr>
+                        <th>${key}</th>
+                        <td><pre class="mb-0">${JSON.stringify(item[key], null, 2)}</pre></td>
+                    </tr>`;
+                } else {
+                    details += `<tr>
+                        <th>${key}</th>
+                        <td>${item[key]}</td>
+                    </tr>`;
+                }
+            }
+        }
+        
+        details += '</table></div>';
+        
+        // Add action buttons
+        details += `<div class="d-grid gap-2 d-md-flex justify-content-md-end mt-3">
+            <button class="btn btn-primary" onclick="huntForEvent(${JSON.stringify(item).replace(/"/g, '&quot;')})">Hunt for This Event</button>
+            <button class="btn btn-danger" onclick="markEventAsSuspicious(${JSON.stringify(item).replace(/"/g, '&quot;')})">Mark as Suspicious</button>
+        </div>`;
+        
+        modalBody.innerHTML = details;
+        
+        // Show the modal
+        const visualizationModal = new bootstrap.Modal(document.getElementById('visualization-modal'));
+        visualizationModal.show();
+    }
+    
+    function showNodeDetails(node) {
+        // Create a modal with node details
+        const modalTitle = document.getElementById('visualization-modal-title');
+        const modalBody = document.getElementById('visualization-modal-body');
+        
+        modalTitle.textContent = node.label || 'Node Details';
+        
+        let details = '<div class="table-responsive"><table class="table table-striped">';
+        
+        // Add all node properties that aren't internal
+        for (const key in node) {
+            if (key !== 'id' && key !== 'x' && key !== 'y' && key !== 'label' && 
+                key !== 'shape' && key !== 'color' && key !== 'font' && key !== 'group') {
+                if (typeof node[key] === 'object' && node[key] !== null) {
+                    details += `<tr>
+                        <th>${key}</th>
+                        <td><pre class="mb-0">${JSON.stringify(node[key], null, 2)}</pre></td>
+                    </tr>`;
+                } else {
+                    details += `<tr>
+                        <th>${key}</th>
+                        <td>${node[key]}</td>
+                    </tr>`;
+                }
+            }
+        }
+        
+        details += '</table></div>';
+        
+        // Add action buttons
+        details += `<div class="d-grid gap-2 d-md-flex justify-content-md-end mt-3">
+            <button class="btn btn-primary" onclick="huntForNode(${JSON.stringify(node).replace(/"/g, '&quot;')})">Hunt for This Node</button>
+            <button class="btn btn-danger" onclick="markNodeAsSuspicious(${JSON.stringify(node).replace(/"/g, '&quot;')})">Mark as Suspicious</button>
+            <button class="btn btn-secondary" onclick="addNodeToWhitelist(${JSON.stringify(node).replace(/"/g, '&quot;')})">Add to Whitelist</button>
+        </div>`;
+        
+        modalBody.innerHTML = details;
+        
+        // Show the modal
+        const visualizationModal = new bootstrap.Modal(document.getElementById('visualization-modal'));
+        visualizationModal.show();
+    }
 
+    // Function to show context menu for a node
+    function showNodeContextMenu(node, position) {
+        // Create context menu if it doesn't exist
+        let contextMenu = document.getElementById('node-context-menu');
+        if (!contextMenu) {
+            contextMenu = document.createElement('div');
+            contextMenu.id = 'node-context-menu';
+            contextMenu.className = 'card shadow position-absolute';
+            contextMenu.style.zIndex = '1000';
+            contextMenu.innerHTML = `
+                <div class="list-group list-group-flush">
+                    <button class="list-group-item list-group-item-action context-menu-details">View Details</button>
+                    <button class="list-group-item list-group-item-action context-menu-hunt">Hunt for This</button>
+                    <button class="list-group-item list-group-item-action context-menu-mark">Mark as Suspicious</button>
+                    <button class="list-group-item list-group-item-action context-menu-whitelist">Add to Whitelist</button>
+                </div>
+            `;
+            document.body.appendChild(contextMenu);
+            
+            // Add event listeners to context menu items
+            contextMenu.querySelector('.context-menu-details').addEventListener('click', function() {
+                const contextNode = JSON.parse(contextMenu.getAttribute('data-node'));
+                showNodeDetails(contextNode);
+                hideContextMenu();
+            });
+            
+            contextMenu.querySelector('.context-menu-hunt').addEventListener('click', function() {
+                const contextNode = JSON.parse(contextMenu.getAttribute('data-node'));
+                huntForNode(contextNode);
+                hideContextMenu();
+            });
+            
+            contextMenu.querySelector('.context-menu-mark').addEventListener('click', function() {
+                const contextNode = JSON.parse(contextMenu.getAttribute('data-node'));
+                markNodeAsSuspicious(contextNode);
+                hideContextMenu();
+            });
+            
+            contextMenu.querySelector('.context-menu-whitelist').addEventListener('click', function() {
+                const contextNode = JSON.parse(contextMenu.getAttribute('data-node'));
+                addNodeToWhitelist(contextNode);
+                hideContextMenu();
+            });
+            
+            // Hide context menu when clicking elsewhere
+            document.addEventListener('click', function(e) {
+                if (!contextMenu.contains(e.target)) {
+                    hideContextMenu();
+                }
+            });
+        }
+        
+        // Position context menu at mouse position
+        contextMenu.style.left = `${position.x}px`;
+        contextMenu.style.top = `${position.y}px`;
+        contextMenu.style.display = 'block';
+        
+        // Store node data in context menu
+        contextMenu.setAttribute('data-node', JSON.stringify(node));
+    }
+    
+    // Function to hide the context menu
+    function hideContextMenu() {
+        const contextMenu = document.getElementById('node-context-menu');
+        if (contextMenu) {
+            contextMenu.style.display = 'none';
+        }
+    }
+    
+    // Function for event context menu (for timeline items)
+    function showEventContextMenu(event, position) {
+        showNodeContextMenu({
+            type: 'event',
+            label: event.content,
+            id: event.id,
+            field: event.field || null,
+            value: event.value || null,
+            event: event
+        }, position);
+    }
+    
+    // Function to hunt for a node
+    function huntForNode(node) {
+        if (!node || (!node.field && !node.type)) {
+            alert('Cannot hunt for this node: missing field information');
+            return;
+        }
+        
+        // Construct a query based on node type and field
+        let query = '';
+        
+        if (node.field && node.value) {
+            // Field-value node
+            query = `search ${node.field}="${node.value}"`;
+        } else if (node.type === 'event' && node.event) {
+            // Event node with event data
+            // Find a key field to search by
+            const event = node.event;
+            let keyField = null;
+            let keyValue = null;
+            
+            // Priority order for fields
+            const priorityFields = ['host', 'user', 'process_guid', 'process_name', 'cmd', 'src_ip', 'dest_ip'];
+            
+            for (const field of priorityFields) {
+                if (event[field]) {
+                    keyField = field;
+                    keyValue = event[field];
+                    break;
+                }
+            }
+            
+            if (keyField && keyValue) {
+                query = `search ${keyField}="${keyValue}"`;
+            } else {
+                // If no key field found, use the first available field
+                for (const field in event) {
+                    if (typeof event[field] !== 'object' && event[field] !== null) {
+                        keyField = field;
+                        keyValue = event[field];
+                        break;
+                    }
+                }
+                
+                if (keyField && keyValue) {
+                    query = `search ${keyField}="${keyValue}"`;
+                } else {
+                    alert('Cannot create hunt query: no suitable fields found');
+                    return;
+                }
+            }
+        } else {
+            alert('Cannot create hunt query: insufficient node information');
+            return;
+        }
+        
+        // Redirect to direct query page
+        window.location.href = `/direct_query?query=${encodeURIComponent(query)}`;
+    }
+    
+    // Function for hunting from timeline events
+    function huntForEvent(event) {
+        huntForNode({
+            type: 'event',
+            event: event,
+            label: event.content
+        });
+    }
+    
+    // Function to mark a node as suspicious
+    function markNodeAsSuspicious(node) {
+        // Check if node has field and value or event data
+        if (!node || (!node.field && !node.type)) {
+            alert('Cannot mark this node: missing identification information');
+            return;
+        }
+        
+        // Get suspicious nodes list container
+        const suspiciousNodesList = document.getElementById('suspicious-nodes-list');
+        
+        // Create an identifier for this node
+        let nodeIdentifier = '';
+        let nodeLabel = '';
+        
+        if (node.field && node.value) {
+            // Field-value node
+            nodeIdentifier = `${node.field}-${node.value}`.replace(/[^a-zA-Z0-9]/g, '_');
+            nodeLabel = `${node.field}: ${node.value}`;
+        } else if (node.type === 'event' && node.event) {
+            // Event node
+            const event = node.event;
+            // Use event ID if available, otherwise create one
+            nodeIdentifier = event.id ? `event-${event.id}`.replace(/[^a-zA-Z0-9]/g, '_') : 
+                            `event-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+            nodeLabel = node.label || event.content || 'Event';
+        } else {
+            // Generic node
+            nodeIdentifier = `node-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+            nodeLabel = node.label || 'Node';
+        }
+        
+        // Check if node is already in the list
+        if (document.getElementById(`suspicious-${nodeIdentifier}`)) {
+            alert('This node is already in the suspicious list');
+            return;
+        }
+        
+        // Clear the "no nodes" message if present
+        const emptyMessage = suspiciousNodesList.querySelector('.text-muted');
+        if (emptyMessage) {
+            suspiciousNodesList.innerHTML = '';
+        }
+        
+        // Create list item for suspicious node
+        const listItem = document.createElement('button');
+        listItem.id = `suspicious-${nodeIdentifier}`;
+        listItem.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+        listItem.innerHTML = `
+            <div>
+                <strong>${nodeLabel}</strong>
+            </div>
+            <button class="btn btn-sm btn-outline-danger remove-suspicious" data-id="${nodeIdentifier}">
+                <i class="fas fa-times"></i> Remove
+            </button>
+        `;
+        
+        // Store the node data in a data attribute
+        listItem.setAttribute('data-node', JSON.stringify(node));
+        
+        // Add to list
+        suspiciousNodesList.appendChild(listItem);
+        
+        // Enable buttons
+        document.getElementById('hunt-suspicious').disabled = false;
+        document.getElementById('clear-suspicious').disabled = false;
+        
+        // Add event listener for remove button
+        listItem.querySelector('.remove-suspicious').addEventListener('click', function(e) {
+            e.stopPropagation();
+            const id = this.getAttribute('data-id');
+            document.getElementById(`suspicious-${id}`).remove();
+            
+            // If no more items, disable buttons and show message
+            if (suspiciousNodesList.children.length === 0) {
+                document.getElementById('hunt-suspicious').disabled = true;
+                document.getElementById('clear-suspicious').disabled = true;
+                suspiciousNodesList.innerHTML = '<div class="list-group-item text-center text-muted">No nodes marked as suspicious yet</div>';
+            }
+        });
+        
+        // Add event listener for clicking on the node
+        listItem.addEventListener('click', function(e) {
+            if (!e.target.classList.contains('remove-suspicious')) {
+                const nodeData = JSON.parse(this.getAttribute('data-node'));
+                showNodeDetails(nodeData);
+            }
+        });
+    }
+    
+    // Function for marking events as suspicious
+    function markEventAsSuspicious(event) {
+        markNodeAsSuspicious({
+            type: 'event',
+            event: event,
+            label: event.content
+        });
+    }
+    
+    // Function to add a node to whitelist
+    function addNodeToWhitelist(node) {
+        if (!node || (!node.field && !node.type)) {
+            alert('Cannot whitelist this node: missing field information');
+            return;
+        }
+        
+        let field = '';
+        let value = '';
+        
+        if (node.field && node.value) {
+            // Field-value node
+            field = node.field;
+            value = node.value;
+        } else if (node.type === 'event' && node.event) {
+            // Event node - find a suitable field
+            const event = node.event;
+            // Priority order for fields
+            const priorityFields = ['host', 'user', 'process_guid', 'process_name', 'cmd', 'src_ip', 'dest_ip'];
+            
+            for (const f of priorityFields) {
+                if (event[f]) {
+                    field = f;
+                    value = event[f];
+                    break;
+                }
+            }
+            
+            if (!field) {
+                // If no key field found, use the first available field
+                for (const f in event) {
+                    if (typeof event[f] !== 'object' && event[f] !== null) {
+                        field = f;
+                        value = event[f];
+                        break;
+                    }
+                }
+            }
+            
+            if (!field) {
+                alert('Cannot whitelist: no suitable fields found');
+                return;
+            }
+        } else {
+            alert('Cannot whitelist: insufficient node information');
+            return;
+        }
+        
+        // Update whitelist UI
+        const whitelistFieldSelect = document.getElementById('whitelist-field');
+        const whitelistValueInput = document.getElementById('whitelist-value');
+        
+        // Check if field exists in dropdown
+        let fieldExists = false;
+        for (let i = 0; i < whitelistFieldSelect.options.length; i++) {
+            if (whitelistFieldSelect.options[i].value === field) {
+                whitelistFieldSelect.selectedIndex = i;
+                fieldExists = true;
+                break;
+            }
+        }
+        
+        // If field doesn't exist, add it
+        if (!fieldExists) {
+            const option = document.createElement('option');
+            option.value = field;
+            option.text = field;
+            option.selected = true;
+            whitelistFieldSelect.appendChild(option);
+        }
+        
+        // Set value in input
+        whitelistValueInput.value = value;
+        
+        // Focus on Add to Whitelist button
+        document.getElementById('add-whitelist').focus();
+    }
+    
+    // Add whitelist entry
+    function addWhitelistEntry() {
+        const field = document.getElementById('whitelist-field').value;
+        const value = document.getElementById('whitelist-value').value;
+        
+        if (!field || !value) {
+            alert('Please select a field and enter a value');
+            return;
+        }
+        
+        const whitelistEntries = document.getElementById('whitelist-entries');
+        
+        // Create a unique ID for this whitelist entry
+        const entryId = `whitelist-${field}-${value}`.replace(/[^a-zA-Z0-9]/g, '_');
+        
+        // Check if entry already exists
+        if (document.getElementById(entryId)) {
+            alert('This entry is already in the whitelist');
+            return;
+        }
+        
+        // Clear the "no entries" message if present
+        const emptyMessage = whitelistEntries.querySelector('.text-muted');
+        if (emptyMessage) {
+            whitelistEntries.innerHTML = '';
+        }
+        
+        // Create list item for whitelist entry
+        const listItem = document.createElement('div');
+        listItem.id = entryId;
+        listItem.className = 'list-group-item d-flex justify-content-between align-items-center';
+        listItem.innerHTML = `
+            <div>
+                <strong>${field}:</strong> ${value}
+            </div>
+            <button class="btn btn-sm btn-outline-secondary remove-whitelist" data-id="${entryId}">
+                <i class="fas fa-times"></i>
+            </button>
+        `;
+        
+        // Add to list
+        whitelistEntries.appendChild(listItem);
+        
+        // Clear input
+        document.getElementById('whitelist-value').value = '';
+        
+        // Add event listener for remove button
+        listItem.querySelector('.remove-whitelist').addEventListener('click', function() {
+            const id = this.getAttribute('data-id');
+            document.getElementById(id).remove();
+            
+            // If no more items, show message
+            if (whitelistEntries.children.length === 0) {
+                whitelistEntries.innerHTML = '<div class="list-group-item text-center text-muted">No whitelist entries</div>';
+            }
+            
+            // Apply whitelist filter
+            applyWhitelistFilter();
+        });
+        
+        // Apply whitelist filter
+        applyWhitelistFilter();
+    }
+    
+    // Apply whitelist filter to visualizations
+    function applyWhitelistFilter() {
+        // Implementation would filter nodes/items based on whitelist
+        // Specific implementation depends on the data structure
+        console.log('Whitelist filter applied');
+    }
+    
+    // Hunt for all suspicious nodes
+    function huntForSuspiciousNodes() {
+        const suspiciousNodesList = document.getElementById('suspicious-nodes-list');
+        const items = suspiciousNodesList.querySelectorAll('[data-node]');
+        
+        if (items.length === 0) {
+            alert('No suspicious nodes to hunt for');
+            return;
+        }
+        
+        // Build a combined query
+        let queryParts = [];
+        
+        items.forEach(item => {
+            const node = JSON.parse(item.getAttribute('data-node'));
+            
+            if (node.field && node.value) {
+                queryParts.push(`${node.field}="${node.value}"`);
+            } else if (node.type === 'event' && node.event) {
+                const event = node.event;
+                // Find a key field
+                for (const field of ['host', 'user', 'process_guid', 'src_ip', 'dest_ip']) {
+                    if (event[field]) {
+                        queryParts.push(`${field}="${event[field]}"`);
+                        break;
+                    }
+                }
+            }
+        });
+        
+        if (queryParts.length === 0) {
+            alert('Could not build a query from suspicious nodes');
+            return;
+        }
+        
+        // Create OR query
+        const query = `search ${queryParts.join(' OR ')}`;
+        
+        // Redirect to direct query page
+        window.location.href = `/direct_query?query=${encodeURIComponent(query)}`;
+    }
+    
+    // Clear all suspicious nodes
+    function clearSuspiciousNodes() {
+        const suspiciousNodesList = document.getElementById('suspicious-nodes-list');
+        suspiciousNodesList.innerHTML = '<div class="list-group-item text-center text-muted">No nodes marked as suspicious yet</div>';
+        
+        // Disable buttons
+        document.getElementById('hunt-suspicious').disabled = true;
+        document.getElementById('clear-suspicious').disabled = true;
+    }
+    
     function loadAIAnalysis() {
         const analysisContainer = document.getElementById('ai-analysis');
         const queriesContainer = document.getElementById('enhanced-queries');

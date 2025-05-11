@@ -241,7 +241,10 @@ class Visualizer:
     @staticmethod
     def generate_timeline(results: List[Dict[str, Any]], 
                         timestamp_field: str = "_time",
-                        entity_field: Optional[str] = None) -> Dict[str, Any]:
+                        entity_field: Optional[str] = None,
+                        mode: str = "grouped",
+                        branch_fields: Optional[List[str]] = None,
+                        connection_fields: Optional[List[str]] = None) -> Dict[str, Any]:
         """
         Generate a timeline visualization from query results
         
@@ -249,6 +252,9 @@ class Visualizer:
             results: List of result dictionaries
             timestamp_field: Field containing timestamp information
             entity_field: Optional field to group events by (e.g., host, user)
+            mode: Visualization mode (grouped, branch, or ungrouped)
+            branch_fields: List of fields to create as timeline branches (for branch mode)
+            connection_fields: List of fields to use for connecting related events
             
         Returns:
             Dictionary with timeline visualization data
@@ -256,9 +262,56 @@ class Visualizer:
         if not results:
             return {"items": []}
         
+        # Convert optional parameters to empty lists if None
+        branch_fields = branch_fields or []
+        connection_fields = connection_fields or []
+        
+        # Standard timeline mode (grouped by entity)
+        if mode == "grouped":
+            return Visualizer._generate_grouped_timeline(
+                results, timestamp_field, entity_field
+            )
+        
+        # Field branch timeline mode
+        elif mode == "branch":
+            return Visualizer._generate_branch_timeline(
+                results, timestamp_field, branch_fields, connection_fields
+            )
+            
+        # Non-grouped timeline mode with network visualization
+        elif mode == "ungrouped":
+            return Visualizer._generate_ungrouped_timeline(
+                results, timestamp_field, connection_fields
+            )
+            
+        # Fallback to standard grouped timeline
+        else:
+            return Visualizer._generate_grouped_timeline(
+                results, timestamp_field, entity_field
+            )
+    
+    @staticmethod
+    def _generate_grouped_timeline(results: List[Dict[str, Any]],
+                               timestamp_field: str = "_time",
+                               entity_field: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Generate a standard grouped timeline visualization
+        
+        Args:
+            results: List of result dictionaries
+            timestamp_field: Field containing timestamp information
+            entity_field: Optional field to group events by
+            
+        Returns:
+            Dictionary with timeline items and groups
+        """
+        if not results:
+            return {"items": []}
+        
         # Generate timeline items
         items = []
         item_id = 0
+        groups = {}
         
         for result in results:
             # Skip if timestamp field is missing
@@ -297,6 +350,13 @@ class Visualizer:
             group = None
             if entity_field and entity_field in result and result[entity_field]:
                 group = str(result[entity_field])
+                
+                # Add to groups dictionary if not exists
+                if group and group not in groups:
+                    groups[group] = {
+                        "id": group,
+                        "content": f"{entity_field}: {group}"
+                    }
             
             # Create timeline item
             item = {
@@ -314,9 +374,306 @@ class Visualizer:
             items.append(item)
             item_id += 1
         
-        # Return timeline items
+        # Return timeline items and groups
         return {
-            "items": items
+            "items": items,
+            "groups": list(groups.values())
+        }
+    
+    @staticmethod
+    def _generate_ungrouped_timeline(results: List[Dict[str, Any]],
+                                 timestamp_field: str = "_time",
+                                 connection_fields: Optional[List[str]] = None) -> Dict[str, Any]:
+        """
+        Generate a non-grouped timeline with network visualization
+        
+        Args:
+            results: List of result dictionaries
+            timestamp_field: Field containing timestamp information
+            connection_fields: List of fields to use for connecting related events
+            
+        Returns:
+            Dictionary with nodes and edges for network visualization
+        """
+        if not results:
+            return {"nodes": [], "edges": []}
+        
+        # Initialize nodes and edges
+        nodes = []
+        edges = []
+        node_ids = {}  # Map event IDs to node IDs
+        node_count = 0
+        
+        # Process results and create nodes
+        for result in results:
+            # Skip if timestamp field is missing
+            if timestamp_field not in result or not result[timestamp_field]:
+                continue
+            
+            # Parse timestamp
+            timestamp = result[timestamp_field]
+            event_time = None
+            
+            try:
+                # Splunk _time format (Unix epoch)
+                if isinstance(timestamp, (int, float)):
+                    event_time = datetime.datetime.fromtimestamp(timestamp)
+                else:
+                    # Try common time formats
+                    for fmt in ["%Y-%m-%dT%H:%M:%S.%f%z", "%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%d %H:%M:%S"]:
+                        try:
+                            event_time = datetime.datetime.strptime(timestamp, fmt)
+                            break
+                        except ValueError:
+                            continue
+            except Exception as e:
+                logger.warning(f"Could not parse timestamp '{timestamp}': {str(e)}")
+                continue
+            
+            if not event_time:
+                continue
+            
+            # Generate node content
+            event_type = Visualizer._determine_event_type(result)
+            event_label = Visualizer._generate_event_label(result)
+            
+            # Create node
+            node_id = f"event_{node_count}"
+            node = {
+                "id": node_id,
+                "label": event_label,
+                "title": json.dumps(result, indent=2),
+                "group": event_type,
+                "event": result,
+                "timestamp": event_time.isoformat(),
+                "value": 10  # Default size
+            }
+            
+            # Add event fields as node properties
+            for field, value in result.items():
+                if field != "_raw" and not isinstance(value, (dict, list)):
+                    node[field] = value
+            
+            nodes.append(node)
+            node_ids[f"{node_count}"] = node_id
+            node_count += 1
+        
+        # Sort nodes by timestamp
+        nodes.sort(key=lambda x: x["timestamp"])
+        
+        # Connect events by time sequence
+        for i in range(len(nodes) - 1):
+            edges.append({
+                "from": nodes[i]["id"],
+                "to": nodes[i+1]["id"],
+                "arrows": "to",
+                "dashes": True,
+                "label": "next",
+                "color": {
+                    "color": "#cccccc",
+                    "opacity": 0.5
+                }
+            })
+        
+        # Connect related events by field values
+        if connection_fields:
+            # Build field value maps
+            field_value_nodes = {}
+            
+            for node in nodes:
+                event = node["event"]
+                for field in connection_fields:
+                    if field in event and event[field]:
+                        value = str(event[field])
+                        if (field, value) not in field_value_nodes:
+                            field_value_nodes[(field, value)] = []
+                        
+                        field_value_nodes[(field, value)].append(node["id"])
+            
+            # Create connections between events with the same field values
+            for (field, value), node_list in field_value_nodes.items():
+                if len(node_list) > 1:
+                    # Connect nodes with the same field value
+                    # Create a value node
+                    value_node_id = f"value_{field}_{value}".replace(".", "_").replace(" ", "_")
+                    
+                    # Check if value node already exists
+                    value_node_exists = False
+                    for node in nodes:
+                        if node["id"] == value_node_id:
+                            value_node_exists = True
+                            break
+                    
+                    if not value_node_exists:
+                        value_node = {
+                            "id": value_node_id,
+                            "label": f"{field}: {value}",
+                            "field": field,
+                            "value": value,
+                            "group": "field_value",
+                            "shape": "diamond"
+                        }
+                        nodes.append(value_node)
+                    
+                    # Connect each event to the value node
+                    for node_id in node_list:
+                        edges.append({
+                            "from": node_id,
+                            "to": value_node_id,
+                            "arrows": "",
+                            "color": {
+                                "color": "#2196F3",
+                                "opacity": 0.8
+                            }
+                        })
+        
+        # Return nodes and edges
+        return {
+            "nodes": nodes,
+            "edges": edges
+        }
+    
+    @staticmethod
+    def _generate_branch_timeline(results: List[Dict[str, Any]],
+                              timestamp_field: str = "_time",
+                              branch_fields: Optional[List[str]] = None,
+                              connection_fields: Optional[List[str]] = None) -> Dict[str, Any]:
+        """
+        Generate a timeline with branches for different fields
+        
+        Args:
+            results: List of result dictionaries
+            timestamp_field: Field containing timestamp information
+            branch_fields: List of fields to create branches for
+            connection_fields: List of fields to use for connecting related events
+            
+        Returns:
+            Dictionary with nodes and edges for network visualization
+        """
+        if not results or not branch_fields:
+            return {"nodes": [], "edges": []}
+        
+        # Initialize nodes and edges
+        nodes = []
+        edges = []
+        node_count = 0
+        
+        # Create field branch nodes
+        branch_nodes = {}
+        for field in branch_fields:
+            branch_node_id = f"branch_{field}"
+            branch_node = {
+                "id": branch_node_id,
+                "label": field,
+                "group": "field",
+                "shape": "box",
+                "fixed": True,
+                "physics": False
+            }
+            nodes.append(branch_node)
+            branch_nodes[field] = branch_node_id
+        
+        # Process results and create event nodes
+        for result in results:
+            # Skip if timestamp field is missing
+            if timestamp_field not in result or not result[timestamp_field]:
+                continue
+            
+            # Parse timestamp
+            timestamp = result[timestamp_field]
+            event_time = None
+            
+            try:
+                # Splunk _time format (Unix epoch)
+                if isinstance(timestamp, (int, float)):
+                    event_time = datetime.datetime.fromtimestamp(timestamp)
+                else:
+                    # Try common time formats
+                    for fmt in ["%Y-%m-%dT%H:%M:%S.%f%z", "%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%d %H:%M:%S"]:
+                        try:
+                            event_time = datetime.datetime.strptime(timestamp, fmt)
+                            break
+                        except ValueError:
+                            continue
+            except Exception as e:
+                logger.warning(f"Could not parse timestamp '{timestamp}': {str(e)}")
+                continue
+            
+            if not event_time:
+                continue
+            
+            # Generate node content
+            event_type = Visualizer._determine_event_type(result)
+            event_label = Visualizer._generate_event_label(result)
+            
+            # Create event node
+            event_node_id = f"event_{node_count}"
+            event_node = {
+                "id": event_node_id,
+                "label": event_label,
+                "title": json.dumps(result, indent=2),
+                "group": event_type,
+                "event": result,
+                "timestamp": event_time.isoformat()
+            }
+            
+            # Add event fields as node properties
+            for field, value in result.items():
+                if field != "_raw" and not isinstance(value, (dict, list)):
+                    event_node[field] = value
+            
+            nodes.append(event_node)
+            node_count += 1
+            
+            # Connect to branch nodes
+            for field in branch_fields:
+                if field in result and result[field]:
+                    edges.append({
+                        "from": branch_nodes[field],
+                        "to": event_node_id,
+                        "arrows": ""
+                    })
+            
+            # Create value nodes for connecting events
+            if connection_fields:
+                for field in connection_fields:
+                    if field in result and result[field]:
+                        value = str(result[field])
+                        value_node_id = f"value_{field}_{value}".replace(".", "_").replace(" ", "_")
+                        
+                        # Check if value node already exists
+                        value_node_exists = False
+                        for node in nodes:
+                            if node["id"] == value_node_id:
+                                value_node_exists = True
+                                break
+                        
+                        if not value_node_exists:
+                            value_node = {
+                                "id": value_node_id,
+                                "label": f"{field}: {value}",
+                                "field": field,
+                                "value": value,
+                                "group": "field_value",
+                                "shape": "diamond"
+                            }
+                            nodes.append(value_node)
+                        
+                        # Connect event to value node
+                        edges.append({
+                            "from": event_node_id,
+                            "to": value_node_id,
+                            "arrows": "",
+                            "color": {
+                                "color": "#2196F3",
+                                "opacity": 0.8
+                            }
+                        })
+        
+        # Return nodes and edges
+        return {
+            "nodes": nodes,
+            "edges": edges
         }
     
     @staticmethod
