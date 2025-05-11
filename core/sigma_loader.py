@@ -165,31 +165,55 @@ class SigmaLoader:
             Splunk SPL query string or None if conversion failed
         """
         try:
-            from sigma.parser import SigmaCollectionParser
+            import sigma
             from sigma.backends.splunk import SplunkBackend
             from sigma.collection import SigmaCollection
+            from sigma.rule import SigmaRule
         except ImportError:
             logger.error("pySigma and required backends are not installed")
             return None
         
-        rule = self.get_rule_by_id(rule_id)
-        if not rule:
+        rule_dict = self.get_rule_by_id(rule_id)
+        if not rule_dict:
+            logger.warning(f"Rule with ID {rule_id} not found")
             return None
         
         try:
-            # Create SigmaCollection from the rule
-            sigma_collection = SigmaCollection([rule])
+            # Convert rule dictionary to SigmaRule
+            # First, make a deep copy to avoid modifying the original
+            import copy
+            rule_copy = copy.deepcopy(rule_dict)
+            
+            # Create a SigmaRule object from the dict
+            try:
+                sigma_rule = SigmaRule.from_dict(rule_copy)
+                # Create SigmaCollection with the rule
+                sigma_collection = SigmaCollection([sigma_rule])
+            except Exception as e:
+                logger.error(f"Error creating SigmaRule from dict: {str(e)}")
+                
+                # Alternative method - parse as YAML
+                import yaml
+                import io
+                
+                yaml_str = yaml.dump(rule_copy)
+                sigma_collection = SigmaCollection.from_yaml(io.StringIO(yaml_str))
             
             # Create Splunk backend
             backend = SplunkBackend()
             
             # Convert to Splunk query
-            queries = backend.convert(sigma_collection)
+            query_list = backend.convert(sigma_collection)
             
-            # Return the first query (most rules generate only one)
-            return queries[0] if queries else None
+            # Return the first query
+            if query_list and len(query_list) > 0:
+                return query_list[0]
+            else:
+                logger.warning(f"No query generated for rule {rule_id}")
+                return None
+                
         except Exception as e:
-            logger.error(f"Error converting rule {rule_id} to Splunk query: {str(e)}")
+            logger.error(f"Error converting Sigma rule {rule_id} to Splunk query: {str(e)}")
             return None
     
     def add_rule_file(self, file_path: str) -> List[str]:

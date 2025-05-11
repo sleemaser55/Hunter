@@ -1,0 +1,323 @@
+{% extends "layout.html" %}
+
+{% block title %}Direct Splunk Query{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h1 class="display-5">Direct Splunk Query</h1>
+        <p class="lead">Execute Splunk queries directly with optional time ranges</p>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i data-feather="terminal" class="me-2"></i> Query Editor
+                </h5>
+            </div>
+            <div class="card-body">
+                <form id="query-form">
+                    <div class="mb-3">
+                        <label for="query-input" class="form-label">Splunk Query</label>
+                        <textarea id="query-input" class="form-control" rows="5" placeholder="Enter your Splunk SPL query here..."></textarea>
+                        <div class="form-text">Enter a Splunk Search Processing Language (SPL) query.</div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="use-timerange" checked>
+                                <label class="form-check-label" for="use-timerange">Use Time Range</label>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="earliest-time" class="form-label">Earliest Time</label>
+                            <input type="text" class="form-control" id="earliest-time" value="-24h">
+                            <div class="form-text">e.g., -24h, -7d, 2023-01-01T00:00:00</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="latest-time" class="form-label">Latest Time</label>
+                            <input type="text" class="form-control" id="latest-time" value="now">
+                            <div class="form-text">e.g., now, +1h, 2023-01-02T00:00:00</div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="max-results" class="form-label">Maximum Results</label>
+                        <input type="number" class="form-control" id="max-results" value="100" min="1" max="10000" style="max-width: 200px;">
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary" id="execute-btn" {% if not splunk_connected %}disabled{% endif %}>
+                        {% if splunk_connected %}Execute Query{% else %}Splunk Disconnected{% endif %}
+                    </button>
+                    
+                    {% if not splunk_connected %}
+                    <div class="alert alert-warning mt-3">
+                        <i data-feather="alert-triangle" class="icon-small me-1"></i>
+                        Cannot connect to Splunk at <strong>{{ splunk_host }}</strong>. 
+                        Check your connection settings.
+                    </div>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4 d-none" id="results-section">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    <i data-feather="list" class="me-2"></i> Query Results
+                </h5>
+                <div>
+                    <button class="btn btn-sm btn-outline-secondary me-2" id="download-csv-btn">
+                        <i data-feather="download" class="icon-small me-1"></i> Download CSV
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" id="download-json-btn">
+                        <i data-feather="download" class="icon-small me-1"></i> Download JSON
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Executed Query</label>
+                    <div class="bg-dark p-3 rounded">
+                        <pre id="executed-query" class="text-light mb-0"></pre>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <label class="form-label mb-0">Results (<span id="result-count">0</span>)</label>
+                        <span class="text-muted small" id="execution-time"></span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover" id="results-table">
+                            <thead>
+                                <tr id="results-header"></tr>
+                            </thead>
+                            <tbody id="results-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <div class="alert alert-info d-none" id="no-results-alert">
+                    <i data-feather="info" class="icon-small me-1"></i>
+                    The query executed successfully but returned no results.
+                </div>
+                
+                <div class="alert alert-danger d-none" id="error-alert">
+                    <i data-feather="alert-circle" class="icon-small me-1"></i>
+                    <span id="error-message"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const queryForm = document.getElementById('query-form');
+        const queryInput = document.getElementById('query-input');
+        const useTimeRange = document.getElementById('use-timerange');
+        const earliestTime = document.getElementById('earliest-time');
+        const latestTime = document.getElementById('latest-time');
+        const maxResults = document.getElementById('max-results');
+        const executeBtn = document.getElementById('execute-btn');
+        const resultsSection = document.getElementById('results-section');
+        const executedQuery = document.getElementById('executed-query');
+        const resultCount = document.getElementById('result-count');
+        const executionTime = document.getElementById('execution-time');
+        const resultsHeader = document.getElementById('results-header');
+        const resultsBody = document.getElementById('results-body');
+        const noResultsAlert = document.getElementById('no-results-alert');
+        const errorAlert = document.getElementById('error-alert');
+        const errorMessage = document.getElementById('error-message');
+        const downloadCsvBtn = document.getElementById('download-csv-btn');
+        const downloadJsonBtn = document.getElementById('download-json-btn');
+        
+        // Store the last query results
+        let lastQueryResults = null;
+        
+        // Initialize Feather icons
+        feather.replace();
+        
+        // Toggle time range inputs based on checkbox
+        useTimeRange.addEventListener('change', function() {
+            earliestTime.disabled = !this.checked;
+            latestTime.disabled = !this.checked;
+        });
+        
+        // Handle query form submission
+        queryForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Get query parameters
+            const query = queryInput.value.trim();
+            if (!query) {
+                alert('Please enter a query');
+                return;
+            }
+            
+            // Get time range if enabled
+            const useTime = useTimeRange.checked;
+            const earliest = useTime ? earliestTime.value.trim() : null;
+            const latest = useTime ? latestTime.value.trim() : null;
+            const count = parseInt(maxResults.value);
+            
+            // Disable form while executing
+            executeBtn.disabled = true;
+            executeBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Executing...';
+            
+            // Hide previous results and errors
+            resultsSection.classList.add('d-none');
+            noResultsAlert.classList.add('d-none');
+            errorAlert.classList.add('d-none');
+            
+            // Execute query
+            fetch('/api/splunk/query', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    query: query,
+                    earliest: earliest,
+                    latest: latest,
+                    count: count,
+                    use_timerange: useTime
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Re-enable form
+                executeBtn.disabled = false;
+                executeBtn.textContent = 'Execute Query';
+                
+                // Store results for download
+                lastQueryResults = data;
+                
+                // Display executed query
+                executedQuery.textContent = data.query || query;
+                
+                // Check for errors
+                if (data.status === 'error') {
+                    errorMessage.textContent = data.error || 'An error occurred executing the query.';
+                    errorAlert.classList.remove('d-none');
+                    resultsSection.classList.remove('d-none');
+                    return;
+                }
+                
+                // Display execution time
+                if (data.execution_time) {
+                    const seconds = data.execution_time.toFixed(2);
+                    executionTime.textContent = `Executed in ${seconds} seconds`;
+                }
+                
+                // Check for no results
+                if (!data.results || data.results.length === 0) {
+                    resultCount.textContent = '0';
+                    noResultsAlert.classList.remove('d-none');
+                    resultsSection.classList.remove('d-none');
+                    return;
+                }
+                
+                // Display result count
+                resultCount.textContent = data.results.length;
+                if (data.total_result_count && data.total_result_count > data.results.length) {
+                    resultCount.textContent += ` (limited from ${data.total_result_count})`;
+                }
+                
+                // Get all fields from results
+                const fields = new Set();
+                data.results.forEach(result => {
+                    Object.keys(result).forEach(key => fields.add(key));
+                });
+                const fieldList = Array.from(fields);
+                
+                // Create table header
+                resultsHeader.innerHTML = '';
+                fieldList.forEach(field => {
+                    const th = document.createElement('th');
+                    th.textContent = field;
+                    resultsHeader.appendChild(th);
+                });
+                
+                // Create table rows
+                resultsBody.innerHTML = '';
+                data.results.forEach(result => {
+                    const tr = document.createElement('tr');
+                    
+                    fieldList.forEach(field => {
+                        const td = document.createElement('td');
+                        const value = result[field];
+                        
+                        if (value === null || value === undefined) {
+                            td.textContent = '';
+                        } else if (typeof value === 'object') {
+                            td.textContent = JSON.stringify(value);
+                        } else {
+                            td.textContent = value;
+                        }
+                        
+                        tr.appendChild(td);
+                    });
+                    
+                    resultsBody.appendChild(tr);
+                });
+                
+                // Show results section
+                resultsSection.classList.remove('d-none');
+            })
+            .catch(error => {
+                console.error('Error executing query:', error);
+                executeBtn.disabled = false;
+                executeBtn.textContent = 'Execute Query';
+                errorMessage.textContent = 'An error occurred communicating with the server.';
+                errorAlert.classList.remove('d-none');
+                resultsSection.classList.remove('d-none');
+            });
+        });
+        
+        // Handle CSV download
+        downloadCsvBtn.addEventListener('click', function() {
+            if (!lastQueryResults || !lastQueryResults.results || lastQueryResults.results.length === 0) {
+                return;
+            }
+            
+            // Get all fields
+            const fields = new Set();
+            lastQueryResults.results.forEach(result => {
+                Object.keys(result).forEach(key => fields.add(key));
+            });
+            const fieldList = Array.from(fields);
+            
+            // Convert to CSV
+            const csvContent = convertToCSV(lastQueryResults.results, fieldList);
+            
+            // Download as file
+            downloadFile(csvContent, 'splunk_results.csv', 'text/csv');
+        });
+        
+        // Handle JSON download
+        downloadJsonBtn.addEventListener('click', function() {
+            if (!lastQueryResults || !lastQueryResults.results || lastQueryResults.results.length === 0) {
+                return;
+            }
+            
+            // Convert to formatted JSON
+            const jsonContent = JSON.stringify(lastQueryResults.results, null, 2);
+            
+            // Download as file
+            downloadFile(jsonContent, 'splunk_results.json', 'application/json');
+        });
+    });
+</script>
+{% endblock %}

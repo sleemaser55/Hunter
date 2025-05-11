@@ -1,0 +1,903 @@
+{% extends "layout.html" %}
+
+{% block title %}Execute Sigma Rule{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h1 class="display-5">Sigma Rule Execution</h1>
+        <p class="lead">Convert and execute Sigma rules against your Splunk instance</p>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <ul class="nav nav-tabs card-header-tabs" id="rule-tabs">
+                    <li class="nav-item">
+                        <a class="nav-link active" id="select-tab" data-bs-toggle="tab" href="#select-rule">Select Existing Rule</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" id="upload-tab" data-bs-toggle="tab" href="#upload-rule">Upload Rule</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" id="paste-tab" data-bs-toggle="tab" href="#paste-rule">Paste YAML</a>
+                    </li>
+                </ul>
+            </div>
+            <div class="card-body">
+                <div class="tab-content">
+                    <!-- Select Existing Rule Tab -->
+                    <div class="tab-pane fade show active" id="select-rule">
+                        <div class="mb-3">
+                            <label for="rule-search" class="form-label">Search Rules</label>
+                            <input type="text" class="form-control" id="rule-search" placeholder="Search by title, description, or content...">
+                        </div>
+                        <div class="mb-3">
+                            <label for="rule-filter" class="form-label">Filter by MITRE Technique</label>
+                            <select class="form-select" id="rule-filter">
+                                <option value="">All Techniques</option>
+                                <!-- Will be populated dynamically -->
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="rule-select" class="form-label">Select Rule</label>
+                            <select class="form-select" id="rule-select" size="10">
+                                <option value="" disabled>Loading rules...</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <!-- Upload Rule Tab -->
+                    <div class="tab-pane fade" id="upload-rule">
+                        <div class="mb-3">
+                            <label for="rule-file" class="form-label">Upload YAML File</label>
+                            <input class="form-control" type="file" id="rule-file" accept=".yml,.yaml">
+                            <div class="form-text">Upload a Sigma rule in YAML format</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Paste YAML Tab -->
+                    <div class="tab-pane fade" id="paste-rule">
+                        <div class="mb-3">
+                            <label for="rule-yaml" class="form-label">Paste Rule YAML</label>
+                            <textarea class="form-control" id="rule-yaml" rows="10" placeholder="Paste Sigma rule YAML here..."></textarea>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row mt-4">
+                    <div class="col-md-12">
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" id="convert-only" value="1">
+                            <label class="form-check-label" for="convert-only">Convert Only (don't execute)</label>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-12">
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" id="use-timerange" checked>
+                            <label class="form-check-label" for="use-timerange">Use Time Range</label>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="earliest-time" class="form-label">Earliest Time</label>
+                            <input type="text" class="form-control" id="earliest-time" value="-24h">
+                            <div class="form-text">e.g., -24h, -7d, 2023-01-01T00:00:00</div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="latest-time" class="form-label">Latest Time</label>
+                            <input type="text" class="form-control" id="latest-time" value="now">
+                            <div class="form-text">e.g., now, +1h, 2023-01-02T00:00:00</div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="max-results" class="form-label">Maximum Results</label>
+                            <input type="number" class="form-control" id="max-results" value="100" min="1" max="10000">
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mt-3">
+                    <button type="button" class="btn btn-primary" id="execute-btn" {% if not splunk_connected %}disabled{% endif %}>
+                        {% if splunk_connected %}Process Rule{% else %}Splunk Disconnected{% endif %}
+                    </button>
+                    
+                    {% if not splunk_connected %}
+                    <div class="alert alert-warning mt-3">
+                        <i data-feather="alert-triangle" class="icon-small me-1"></i>
+                        Cannot connect to Splunk at <strong>{{ splunk_host }}</strong>. 
+                        You can still convert rules but cannot execute them.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Rule Info Section -->
+<div class="row mb-4 d-none" id="rule-info-section">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i data-feather="info" class="me-2"></i> Rule Information
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h5 id="rule-title">Rule Title</h5>
+                        <p class="text-muted mb-0" id="rule-id">Rule ID</p>
+                        <p class="mb-3" id="rule-description">Rule description will appear here.</p>
+                        
+                        <div class="mb-3">
+                            <h6>Author</h6>
+                            <p id="rule-author">Author information</p>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <h6>Status</h6>
+                            <span class="badge rounded-pill bg-info" id="rule-status">Status</span>
+                            <span class="badge rounded-pill bg-warning" id="rule-level">Level</span>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <h6>MITRE ATT&CK</h6>
+                            <div id="rule-mitre"></div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <h6>Tags</h6>
+                            <div id="rule-tags"></div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <h6>False Positives</h6>
+                            <ul id="rule-falsepositives"></ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Converted Query Section -->
+<div class="row mb-4 d-none" id="query-section">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    <i data-feather="code" class="me-2"></i> Converted Splunk Query
+                </h5>
+                <button class="btn btn-sm btn-outline-secondary" id="copy-query-btn">
+                    <i data-feather="copy" class="icon-small me-1"></i> Copy
+                </button>
+            </div>
+            <div class="card-body">
+                <pre id="converted-query" class="bg-dark text-light p-3 rounded"></pre>
+                
+                <div class="mt-3 d-none" id="execute-query-section">
+                    <button class="btn btn-primary" id="execute-query-btn" {% if not splunk_connected %}disabled{% endif %}>
+                        {% if splunk_connected %}Execute This Query{% else %}Splunk Disconnected{% endif %}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Query Results Section -->
+<div class="row mb-4 d-none" id="results-section">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    <i data-feather="list" class="me-2"></i> Query Results
+                </h5>
+                <div>
+                    <button class="btn btn-sm btn-outline-secondary me-2" id="download-csv-btn">
+                        <i data-feather="download" class="icon-small me-1"></i> CSV
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" id="download-json-btn">
+                        <i data-feather="download" class="icon-small me-1"></i> JSON
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <label class="form-label mb-0">Results (<span id="result-count">0</span>)</label>
+                        <span class="text-muted small" id="execution-time"></span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover" id="results-table">
+                            <thead>
+                                <tr id="results-header"></tr>
+                            </thead>
+                            <tbody id="results-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <div class="alert alert-info d-none" id="no-results-alert">
+                    <i data-feather="info" class="icon-small me-1"></i>
+                    The query executed successfully but returned no results.
+                </div>
+                
+                <div class="alert alert-danger d-none" id="error-alert">
+                    <i data-feather="alert-circle" class="icon-small me-1"></i>
+                    <span id="error-message"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // DOM elements
+        const ruleSearch = document.getElementById('rule-search');
+        const ruleFilter = document.getElementById('rule-filter');
+        const ruleSelect = document.getElementById('rule-select');
+        const ruleFile = document.getElementById('rule-file');
+        const ruleYaml = document.getElementById('rule-yaml');
+        const convertOnly = document.getElementById('convert-only');
+        const useTimeRange = document.getElementById('use-timerange');
+        const earliestTime = document.getElementById('earliest-time');
+        const latestTime = document.getElementById('latest-time');
+        const maxResults = document.getElementById('max-results');
+        const executeBtn = document.getElementById('execute-btn');
+        
+        // Rule info elements
+        const ruleInfoSection = document.getElementById('rule-info-section');
+        const ruleTitle = document.getElementById('rule-title');
+        const ruleId = document.getElementById('rule-id');
+        const ruleDescription = document.getElementById('rule-description');
+        const ruleAuthor = document.getElementById('rule-author');
+        const ruleStatus = document.getElementById('rule-status');
+        const ruleLevel = document.getElementById('rule-level');
+        const ruleMitre = document.getElementById('rule-mitre');
+        const ruleTags = document.getElementById('rule-tags');
+        const ruleFalsePositives = document.getElementById('rule-falsepositives');
+        
+        // Query elements
+        const querySection = document.getElementById('query-section');
+        const convertedQuery = document.getElementById('converted-query');
+        const copyQueryBtn = document.getElementById('copy-query-btn');
+        const executeQuerySection = document.getElementById('execute-query-section');
+        const executeQueryBtn = document.getElementById('execute-query-btn');
+        
+        // Results elements
+        const resultsSection = document.getElementById('results-section');
+        const resultCount = document.getElementById('result-count');
+        const executionTime = document.getElementById('execution-time');
+        const resultsHeader = document.getElementById('results-header');
+        const resultsBody = document.getElementById('results-body');
+        const noResultsAlert = document.getElementById('no-results-alert');
+        const errorAlert = document.getElementById('error-alert');
+        const errorMessage = document.getElementById('error-message');
+        const downloadCsvBtn = document.getElementById('download-csv-btn');
+        const downloadJsonBtn = document.getElementById('download-json-btn');
+        
+        // Store data
+        let allRules = [];
+        let filteredRules = [];
+        let currentRule = null;
+        let convertedSplunkQuery = null;
+        let lastQueryResults = null;
+        
+        // Initialize Feather icons
+        feather.replace();
+        
+        // Load all rules
+        loadAllRules();
+        
+        // Load technique filter options
+        loadTechniqueOptions();
+        
+        // Toggle time range inputs based on checkbox
+        useTimeRange.addEventListener('change', function() {
+            earliestTime.disabled = !this.checked;
+            latestTime.disabled = !this.checked;
+        });
+        
+        // Setup rule search
+        ruleSearch.addEventListener('input', filterRules);
+        
+        // Setup technique filter
+        ruleFilter.addEventListener('change', filterRules);
+        
+        // Setup rule selection
+        ruleSelect.addEventListener('change', function() {
+            const ruleId = this.value;
+            if (ruleId) {
+                loadRuleDetails(ruleId);
+            }
+        });
+        
+        // Setup rule file upload
+        ruleFile.addEventListener('change', function(e) {
+            if (this.files.length === 0) return;
+            
+            const file = this.files[0];
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                const yamlContent = e.target.result;
+                try {
+                    const ruleObj = jsyaml.load(yamlContent);
+                    displayRuleDetails(ruleObj);
+                    document.getElementById('paste-yaml').value = yamlContent;
+                } catch (error) {
+                    alert('Invalid YAML file: ' + error);
+                }
+            };
+            
+            reader.readAsText(file);
+        });
+        
+        // Setup process rule button
+        executeBtn.addEventListener('click', processRule);
+        
+        // Setup copy query button
+        copyQueryBtn.addEventListener('click', function() {
+            if (convertedQuery.textContent) {
+                navigator.clipboard.writeText(convertedQuery.textContent)
+                    .then(() => {
+                        this.textContent = 'Copied!';
+                        setTimeout(() => {
+                            this.innerHTML = '<i data-feather="copy" class="icon-small me-1"></i> Copy';
+                            feather.replace();
+                        }, 1500);
+                    })
+                    .catch(err => {
+                        console.error('Failed to copy text: ', err);
+                    });
+            }
+        });
+        
+        // Setup execute query button
+        executeQueryBtn.addEventListener('click', function() {
+            if (convertedSplunkQuery) {
+                executeConverted();
+            }
+        });
+        
+        // Setup download buttons
+        downloadCsvBtn.addEventListener('click', downloadCsv);
+        downloadJsonBtn.addEventListener('click', downloadJson);
+        
+        // Load all rules from the server
+        function loadAllRules() {
+            fetch('/api/sigma/rules')
+                .then(response => response.json())
+                .then(data => {
+                    allRules = data;
+                    filteredRules = [...allRules];
+                    populateRuleSelect(filteredRules);
+                })
+                .catch(error => {
+                    console.error('Error loading rules:', error);
+                    ruleSelect.innerHTML = '<option value="" disabled>Error loading rules</option>';
+                });
+        }
+        
+        // Load technique options for the filter
+        function loadTechniqueOptions() {
+            fetch('/api/mitre/techniques')
+                .then(response => response.json())
+                .then(data => {
+                    // Sort techniques by ID
+                    data.sort((a, b) => a.id.localeCompare(b.id));
+                    
+                    // Add options to the filter
+                    data.forEach(technique => {
+                        const option = document.createElement('option');
+                        option.value = technique.id;
+                        option.textContent = `${technique.id} - ${technique.name}`;
+                        ruleFilter.appendChild(option);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading techniques:', error);
+                });
+        }
+        
+        // Filter rules based on search and technique filter
+        function filterRules() {
+            const searchTerm = ruleSearch.value.toLowerCase();
+            const techniqueId = ruleFilter.value;
+            
+            // Apply filters
+            filteredRules = allRules.filter(rule => {
+                // Search filter
+                const matchesSearch = !searchTerm || 
+                    rule.title.toLowerCase().includes(searchTerm) ||
+                    (rule.description && rule.description.toLowerCase().includes(searchTerm));
+                
+                // Technique filter
+                let matchesTechnique = !techniqueId;
+                if (techniqueId && rule.tags) {
+                    const tags = Array.isArray(rule.tags) ? rule.tags : [rule.tags];
+                    const techniqueTag = `attack.t${techniqueId.substring(1).toLowerCase()}`;
+                    matchesTechnique = tags.some(tag => 
+                        tag === techniqueTag || 
+                        tag.startsWith(`${techniqueTag}.`)
+                    );
+                }
+                
+                return matchesSearch && matchesTechnique;
+            });
+            
+            // Update rule select
+            populateRuleSelect(filteredRules);
+        }
+        
+        // Populate rule select dropdown
+        function populateRuleSelect(rules) {
+            ruleSelect.innerHTML = '';
+            
+            if (rules.length === 0) {
+                const option = document.createElement('option');
+                option.disabled = true;
+                option.selected = true;
+                option.textContent = 'No matching rules';
+                ruleSelect.appendChild(option);
+                return;
+            }
+            
+            // Sort rules by title
+            rules.sort((a, b) => a.title.localeCompare(b.title));
+            
+            // Add options
+            rules.forEach(rule => {
+                const option = document.createElement('option');
+                option.value = rule.id;
+                option.textContent = rule.title;
+                option.title = rule.description || '';
+                ruleSelect.appendChild(option);
+            });
+        }
+        
+        // Load rule details from server
+        function loadRuleDetails(ruleId) {
+            fetch(`/api/sigma/rule/${ruleId}`)
+                .then(response => response.json())
+                .then(rule => {
+                    currentRule = rule;
+                    displayRuleDetails(rule);
+                })
+                .catch(error => {
+                    console.error('Error loading rule details:', error);
+                });
+        }
+        
+        // Display rule details in the UI
+        function displayRuleDetails(rule) {
+            // Update rule info
+            ruleTitle.textContent = rule.title || 'Unnamed Rule';
+            ruleId.textContent = rule.id || 'No ID';
+            ruleDescription.textContent = rule.description || 'No description';
+            
+            // Author
+            if (rule.author) {
+                const authors = Array.isArray(rule.author) ? rule.author : [rule.author];
+                ruleAuthor.textContent = authors.join(', ');
+            } else {
+                ruleAuthor.textContent = 'Unknown';
+            }
+            
+            // Status and level
+            ruleStatus.textContent = rule.status || 'unknown';
+            ruleLevel.textContent = rule.level || 'unknown';
+            
+            // MITRE ATT&CK
+            ruleMitre.innerHTML = '';
+            if (rule.tags) {
+                const tags = Array.isArray(rule.tags) ? rule.tags : [rule.tags];
+                const mitreTags = tags.filter(tag => typeof tag === 'string' && tag.startsWith('attack.t'));
+                
+                if (mitreTags.length > 0) {
+                    mitreTags.forEach(tag => {
+                        const parts = tag.split('.');
+                        let techniqueId = '';
+                        
+                        if (parts.length >= 2 && parts[1].startsWith('t')) {
+                            techniqueId = `T${parts[1].substring(1).toUpperCase()}`;
+                            if (parts.length >= 3) {
+                                techniqueId += `.${parts[2]}`;
+                            }
+                        }
+                        
+                        if (techniqueId) {
+                            const badge = document.createElement('span');
+                            badge.className = 'badge bg-secondary me-1 mb-1';
+                            badge.textContent = techniqueId;
+                            ruleMitre.appendChild(badge);
+                        }
+                    });
+                } else {
+                    ruleMitre.textContent = 'No MITRE ATT&CK mappings';
+                }
+            } else {
+                ruleMitre.textContent = 'No MITRE ATT&CK mappings';
+            }
+            
+            // Tags
+            ruleTags.innerHTML = '';
+            if (rule.tags) {
+                const tags = Array.isArray(rule.tags) ? rule.tags : [rule.tags];
+                const nonMitreTags = tags.filter(tag => typeof tag === 'string' && !tag.startsWith('attack.'));
+                
+                if (nonMitreTags.length > 0) {
+                    nonMitreTags.forEach(tag => {
+                        const badge = document.createElement('span');
+                        badge.className = 'badge bg-info me-1 mb-1';
+                        badge.textContent = tag;
+                        ruleTags.appendChild(badge);
+                    });
+                } else {
+                    ruleTags.textContent = 'No additional tags';
+                }
+            } else {
+                ruleTags.textContent = 'No tags';
+            }
+            
+            // False positives
+            ruleFalsePositives.innerHTML = '';
+            if (rule.falsepositives) {
+                const fps = Array.isArray(rule.falsepositives) ? rule.falsepositives : [rule.falsepositives];
+                
+                if (fps.length > 0 && fps[0] !== null) {
+                    fps.forEach(fp => {
+                        if (fp) {
+                            const li = document.createElement('li');
+                            li.textContent = fp;
+                            ruleFalsePositives.appendChild(li);
+                        }
+                    });
+                } else {
+                    const li = document.createElement('li');
+                    li.textContent = 'None specified';
+                    ruleFalsePositives.appendChild(li);
+                }
+            } else {
+                const li = document.createElement('li');
+                li.textContent = 'None specified';
+                ruleFalsePositives.appendChild(li);
+            }
+            
+            // Show rule info section
+            ruleInfoSection.classList.remove('d-none');
+            
+            // Reset other sections
+            querySection.classList.add('d-none');
+            executeQuerySection.classList.add('d-none');
+            resultsSection.classList.add('d-none');
+        }
+        
+        // Process the current rule (convert and optionally execute)
+        function processRule() {
+            let ruleId = null;
+            let ruleYamlContent = null;
+            
+            // Determine which tab is active and get the rule accordingly
+            const activeTab = document.querySelector('#rule-tabs .nav-link.active').id;
+            
+            if (activeTab === 'select-tab') {
+                // Using selected rule
+                ruleId = ruleSelect.value;
+                if (!ruleId) {
+                    alert('Please select a rule');
+                    return;
+                }
+            } else if (activeTab === 'upload-tab') {
+                // Using uploaded file
+                if (!ruleFile.files.length) {
+                    alert('Please upload a rule file');
+                    return;
+                }
+                
+                // We'll handle file upload separately
+                const file = ruleFile.files[0];
+                const reader = new FileReader();
+                
+                reader.onload = function(e) {
+                    ruleYamlContent = e.target.result;
+                    convertYamlRule(ruleYamlContent);
+                };
+                
+                reader.readAsText(file);
+                return;
+            } else if (activeTab === 'paste-tab') {
+                // Using pasted YAML
+                ruleYamlContent = ruleYaml.value.trim();
+                if (!ruleYamlContent) {
+                    alert('Please paste rule YAML');
+                    return;
+                }
+                
+                convertYamlRule(ruleYamlContent);
+                return;
+            }
+            
+            // Process existing rule by ID
+            if (ruleId) {
+                convertRuleById(ruleId);
+            }
+        }
+        
+        // Convert a rule by ID
+        function convertRuleById(ruleId) {
+            // Disable button while processing
+            executeBtn.disabled = true;
+            executeBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Converting...';
+            
+            // Convert rule to Splunk query
+            fetch(`/api/sigma/convert/${ruleId}`)
+                .then(response => response.json())
+                .then(data => {
+                    // Re-enable button
+                    executeBtn.disabled = false;
+                    executeBtn.textContent = 'Process Rule';
+                    
+                    if (data.error) {
+                        alert('Error converting rule: ' + data.error);
+                        return;
+                    }
+                    
+                    // Store the query
+                    convertedSplunkQuery = data.query;
+                    
+                    // Display the query
+                    convertedQuery.textContent = data.query;
+                    querySection.classList.remove('d-none');
+                    
+                    // Show execute section if not convert-only
+                    if (!convertOnly.checked && '{{ splunk_connected }}' === 'True') {
+                        executeQuerySection.classList.remove('d-none');
+                    } else {
+                        executeQuerySection.classList.add('d-none');
+                    }
+                    
+                    // If not convert-only, execute the query
+                    if (!convertOnly.checked && '{{ splunk_connected }}' === 'True') {
+                        executeConverted();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error converting rule:', error);
+                    executeBtn.disabled = false;
+                    executeBtn.textContent = 'Process Rule';
+                    alert('Error communicating with the server');
+                });
+        }
+        
+        // Convert a rule from YAML content
+        function convertYamlRule(yamlContent) {
+            // Disable button while processing
+            executeBtn.disabled = true;
+            executeBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Converting...';
+            
+            // Convert YAML rule to Splunk query
+            fetch('/api/sigma/convert', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    yaml: yamlContent
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    // Re-enable button
+                    executeBtn.disabled = false;
+                    executeBtn.textContent = 'Process Rule';
+                    
+                    if (data.error) {
+                        alert('Error converting rule: ' + data.error);
+                        return;
+                    }
+                    
+                    // Store the query and rule
+                    convertedSplunkQuery = data.query;
+                    currentRule = data.rule;
+                    
+                    // Display rule details
+                    displayRuleDetails(data.rule);
+                    
+                    // Display the query
+                    convertedQuery.textContent = data.query;
+                    querySection.classList.remove('d-none');
+                    
+                    // Show execute section if not convert-only
+                    if (!convertOnly.checked && '{{ splunk_connected }}' === 'True') {
+                        executeQuerySection.classList.remove('d-none');
+                    } else {
+                        executeQuerySection.classList.add('d-none');
+                    }
+                    
+                    // If not convert-only, execute the query
+                    if (!convertOnly.checked && '{{ splunk_connected }}' === 'True') {
+                        executeConverted();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error converting rule:', error);
+                    executeBtn.disabled = false;
+                    executeBtn.textContent = 'Process Rule';
+                    alert('Error communicating with the server');
+                });
+        }
+        
+        // Execute the converted query
+        function executeConverted() {
+            if (!convertedSplunkQuery) return;
+            
+            // Get parameters
+            const useTime = useTimeRange.checked;
+            const earliest = useTime ? earliestTime.value.trim() : null;
+            const latest = useTime ? latestTime.value.trim() : null;
+            const count = parseInt(maxResults.value);
+            
+            // Disable button while executing
+            executeQueryBtn.disabled = true;
+            executeQueryBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Executing...';
+            
+            // Hide previous results
+            noResultsAlert.classList.add('d-none');
+            errorAlert.classList.add('d-none');
+            
+            // Execute query
+            fetch('/api/splunk/query', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    query: convertedSplunkQuery,
+                    earliest: earliest,
+                    latest: latest,
+                    count: count,
+                    use_timerange: useTime
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    // Re-enable button
+                    executeQueryBtn.disabled = false;
+                    executeQueryBtn.textContent = 'Execute This Query';
+                    
+                    // Store results for download
+                    lastQueryResults = data;
+                    
+                    // Check for errors
+                    if (data.status === 'error') {
+                        errorMessage.textContent = data.error || 'An error occurred executing the query.';
+                        errorAlert.classList.remove('d-none');
+                        resultsSection.classList.remove('d-none');
+                        return;
+                    }
+                    
+                    // Display execution time
+                    if (data.execution_time) {
+                        const seconds = data.execution_time.toFixed(2);
+                        executionTime.textContent = `Executed in ${seconds} seconds`;
+                    }
+                    
+                    // Check for no results
+                    if (!data.results || data.results.length === 0) {
+                        resultCount.textContent = '0';
+                        noResultsAlert.classList.remove('d-none');
+                        resultsSection.classList.remove('d-none');
+                        return;
+                    }
+                    
+                    // Display result count
+                    resultCount.textContent = data.results.length;
+                    if (data.total_result_count && data.total_result_count > data.results.length) {
+                        resultCount.textContent += ` (limited from ${data.total_result_count})`;
+                    }
+                    
+                    // Get all fields from results
+                    const fields = new Set();
+                    data.results.forEach(result => {
+                        Object.keys(result).forEach(key => fields.add(key));
+                    });
+                    const fieldList = Array.from(fields);
+                    
+                    // Create table header
+                    resultsHeader.innerHTML = '';
+                    fieldList.forEach(field => {
+                        const th = document.createElement('th');
+                        th.textContent = field;
+                        resultsHeader.appendChild(th);
+                    });
+                    
+                    // Create table rows
+                    resultsBody.innerHTML = '';
+                    data.results.forEach(result => {
+                        const tr = document.createElement('tr');
+                        
+                        fieldList.forEach(field => {
+                            const td = document.createElement('td');
+                            const value = result[field];
+                            
+                            if (value === null || value === undefined) {
+                                td.textContent = '';
+                            } else if (typeof value === 'object') {
+                                td.textContent = JSON.stringify(value);
+                            } else {
+                                td.textContent = value;
+                            }
+                            
+                            tr.appendChild(td);
+                        });
+                        
+                        resultsBody.appendChild(tr);
+                    });
+                    
+                    // Show results section
+                    resultsSection.classList.remove('d-none');
+                })
+                .catch(error => {
+                    console.error('Error executing query:', error);
+                    executeQueryBtn.disabled = false;
+                    executeQueryBtn.textContent = 'Execute This Query';
+                    errorMessage.textContent = 'An error occurred communicating with the server.';
+                    errorAlert.classList.remove('d-none');
+                    resultsSection.classList.remove('d-none');
+                });
+        }
+        
+        // Download results as CSV
+        function downloadCsv() {
+            if (!lastQueryResults || !lastQueryResults.results || lastQueryResults.results.length === 0) {
+                return;
+            }
+            
+            // Get all fields
+            const fields = new Set();
+            lastQueryResults.results.forEach(result => {
+                Object.keys(result).forEach(key => fields.add(key));
+            });
+            const fieldList = Array.from(fields);
+            
+            // Convert to CSV
+            const csvContent = convertToCSV(lastQueryResults.results, fieldList);
+            
+            // Download as file
+            downloadFile(csvContent, 'splunk_results.csv', 'text/csv');
+        }
+        
+        // Download results as JSON
+        function downloadJson() {
+            if (!lastQueryResults || !lastQueryResults.results || lastQueryResults.results.length === 0) {
+                return;
+            }
+            
+            // Convert to formatted JSON
+            const jsonContent = JSON.stringify(lastQueryResults.results, null, 2);
+            
+            // Download as file
+            downloadFile(jsonContent, 'splunk_results.json', 'application/json');
+        }
+    });
+</script>
+{% endblock %}

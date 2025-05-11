@@ -28,6 +28,12 @@
                     <li class="nav-item">
                         <a class="nav-link {% if '/sigma' in request.path %}active{% endif %}" href="{{ url_for('sigma_rules') }}">Sigma Rules</a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if '/sigma-execute' in request.path %}active{% endif %}" href="{{ url_for('sigma_execute') }}">Execute Rule</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if '/direct-query' in request.path %}active{% endif %}" href="{{ url_for('direct_query') }}">Direct Query</a>
+                    </li>
                 </ul>
                 <div class="ms-auto d-flex align-items-center">
                     <span id="splunk-status" class="badge {% if splunk_connected %}bg-success{% else %}bg-danger{% endif %} me-2">

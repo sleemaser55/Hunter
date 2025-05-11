@@ -11,7 +11,7 @@
 </div>
 
 <div class="row mb-4">
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="card h-100">
             <div class="card-header">
                 <h5 class="card-title mb-0">
@@ -24,7 +24,7 @@
             </div>
         </div>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="card h-100">
             <div class="card-header">
                 <h5 class="card-title mb-0">
@@ -37,7 +37,36 @@
             </div>
         </div>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-3">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i data-feather="code" class="me-2"></i> Execute Rule
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">Convert a Sigma rule to a Splunk query, with optional execution and time range filtering.</p>
+                <a href="{{ url_for('sigma_execute') }}" class="btn btn-primary">Execute Rules</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i data-feather="terminal" class="me-2"></i> Direct Query
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">Execute Splunk queries directly with optional time ranges and see the results.</p>
+                <a href="{{ url_for('direct_query') }}" class="btn btn-primary">Query Splunk</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-12">
         <div class="card h-100">
             <div class="card-header">
                 <h5 class="card-title mb-0">

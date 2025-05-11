@@ -68,8 +68,8 @@ class SplunkQueryExecutor:
             self.connected = False
             return False
     
-    def execute_query(self, query: str, earliest_time: str = "-24h", 
-                      latest_time: str = "now", 
+    def execute_query(self, query: str, earliest_time: Optional[str] = "-24h", 
+                      latest_time: Optional[str] = "now", 
                       exec_mode: str = "normal",
                       index: str = config.SPLUNK_INDEX,
                       max_count: int = 1000,
@@ -110,13 +110,19 @@ class SplunkQueryExecutor:
             # Create the job
             if self.service is None:
                 raise Exception("Splunk service is not initialized")
+            
+            # Prepare kwargs for job creation
+            job_kwargs = {
+                'exec_mode': exec_mode
+            }
+            
+            # Add timerange parameters only if they are not None
+            if earliest_time is not None:
+                job_kwargs['earliest_time'] = earliest_time
+            if latest_time is not None:
+                job_kwargs['latest_time'] = latest_time
                 
-            job = self.service.jobs.create(
-                query,
-                earliest_time=earliest_time,
-                latest_time=latest_time,
-                exec_mode=exec_mode
-            )
+            job = self.service.jobs.create(query, **job_kwargs)
             
             # Wait for the job to complete or timeout
             elapsed_time = 0

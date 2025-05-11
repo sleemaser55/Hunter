@@ -32,6 +32,11 @@ def mitre_techniques():
     techniques = mitre_parser.get_techniques(tactic_id)
     return jsonify(techniques)
 
+@app.route('/api/mitre/techniques')
+def api_mitre_techniques():
+    """API endpoint to get MITRE techniques"""
+    return mitre_techniques()
+
 @app.route('/mitre/technique/<technique_id>')
 def mitre_technique(technique_id):
     """Get details for a specific technique"""
@@ -76,6 +81,99 @@ def sigma_rule(rule_id):
     
     return jsonify(rule)
 
+@app.route('/api/sigma/rules')
+def api_sigma_rules():
+    """API endpoint to get all sigma rules"""
+    technique_id = request.args.get('technique')
+    search_query = request.args.get('search')
+    
+    if technique_id:
+        rules = sigma_loader.get_rules_by_technique(technique_id)
+    elif search_query:
+        rules = sigma_loader.search_rules(search_query)
+    else:
+        rules = sigma_loader.get_all_rules()
+    
+    return jsonify(rules)
+
+@app.route('/api/sigma/rule/<rule_id>')
+def api_sigma_rule(rule_id):
+    """API endpoint to get details for a specific Sigma rule"""
+    return sigma_rule(rule_id)
+
+@app.route('/api/sigma/convert/<rule_id>')
+def api_convert_sigma_rule(rule_id):
+    """API endpoint to convert a Sigma rule to Splunk query"""
+    rule = sigma_loader.get_rule_by_id(rule_id)
+    if not rule:
+        return jsonify({'error': f'Rule {rule_id} not found'}), 404
+    
+    # Convert to Splunk query
+    query = sigma_loader.convert_rule_to_splunk(rule_id)
+    if not query:
+        return jsonify({'error': f'Failed to convert rule {rule_id} to Splunk query'}), 400
+    
+    return jsonify({
+        'rule_id': rule_id,
+        'rule_title': rule.get('title'),
+        'query': query
+    })
+
+@app.route('/api/sigma/convert', methods=['POST'])
+def api_convert_sigma_yaml():
+    """API endpoint to convert a Sigma rule YAML to Splunk query"""
+    data = request.json
+    
+    if not data or 'yaml' not in data:
+        return jsonify({'error': 'No YAML provided'}), 400
+    
+    yaml_content = data['yaml']
+    
+    try:
+        # Parse YAML
+        import yaml
+        rule = yaml.safe_load(yaml_content)
+        
+        # Validate rule
+        if not rule.get('detection'):
+            return jsonify({'error': 'Invalid Sigma rule: missing detection section'}), 400
+        
+        # Convert to Splunk query
+        try:
+            import sigma
+            from sigma.backends.splunk import SplunkBackend
+            from sigma.collection import SigmaCollection
+            from sigma.rule import SigmaRule
+            
+            # Create SigmaRule from dict
+            sigma_rule = SigmaRule.from_dict(rule)
+            
+            # Create SigmaCollection with the rule
+            sigma_collection = SigmaCollection([sigma_rule])
+            
+            # Create Splunk backend
+            backend = SplunkBackend()
+            
+            # Convert to Splunk query
+            query_list = backend.convert(sigma_collection)
+            
+            if not query_list:
+                return jsonify({'error': 'Failed to convert rule to Splunk query'}), 400
+            
+            # Return the query
+            return jsonify({
+                'rule': rule,
+                'query': query_list[0]
+            })
+        
+        except Exception as e:
+            logger.error(f"Error converting Sigma rule: {str(e)}")
+            return jsonify({'error': f'Error converting rule: {str(e)}'}), 400
+    
+    except Exception as e:
+        logger.error(f"Error parsing YAML: {str(e)}")
+        return jsonify({'error': f'Invalid YAML: {str(e)}'}), 400
+
 @app.route('/splunk/test', methods=['GET'])
 def test_splunk():
     """Test the connection to Splunk"""
@@ -92,8 +190,15 @@ def execute_query():
         return jsonify({'error': 'No query provided'}), 400
     
     query = data['query']
-    earliest = data.get('earliest', '-24h')
-    latest = data.get('latest', 'now')
+    use_timerange = data.get('use_timerange', True)
+    
+    # Set time range parameters if enabled
+    earliest = None
+    latest = None
+    if use_timerange:
+        earliest = data.get('earliest', '-24h')
+        latest = data.get('latest', 'now')
+    
     count = data.get('count', 100)
     
     result = splunk_query.execute_query(
@@ -104,6 +209,11 @@ def execute_query():
     )
     
     return jsonify(result)
+
+@app.route('/api/splunk/query', methods=['POST'])
+def api_execute_query():
+    """API endpoint to execute a Splunk query"""
+    return execute_query()
 
 @app.route('/splunk/rule/<rule_id>', methods=['POST'])
 def execute_rule(rule_id):
@@ -258,6 +368,20 @@ def remove_mapping():
         return jsonify({'status': 'success'})
     else:
         return jsonify({'error': 'Mapping not found'}), 404
+
+@app.route('/direct-query')
+def direct_query():
+    """Render the direct Splunk query page"""
+    return render_template('splunk_query.html', 
+                          splunk_connected=splunk_connected,
+                          splunk_host=f"{config.SPLUNK_HOST}:{config.SPLUNK_PORT}")
+
+@app.route('/sigma-execute')
+def sigma_execute():
+    """Render the Sigma rule execution page"""
+    return render_template('sigma_execute.html', 
+                          splunk_connected=splunk_connected,
+                          splunk_host=f"{config.SPLUNK_HOST}:{config.SPLUNK_PORT}")
 
 @app.route('/results')
 def view_results():
