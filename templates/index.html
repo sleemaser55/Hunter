@@ -41,12 +41,12 @@
         <div class="card h-100">
             <div class="card-header">
                 <h5 class="card-title mb-0">
-                    <i data-feather="code" class="me-2"></i> Execute Rule
+                    <i data-feather="map" class="me-2"></i> Field Mappings
                 </h5>
             </div>
             <div class="card-body">
-                <p class="card-text">Convert a Sigma rule to a Splunk query, with optional execution and time range filtering.</p>
-                <a href="{{ url_for('sigma_execute') }}" class="btn btn-primary">Execute Rules</a>
+                <p class="card-text">Manage field mappings between Sigma rules and Splunk with auto-detection via Splunk metadata.</p>
+                <a href="{{ url_for('mapping_manager') }}" class="btn btn-primary">Manage Mappings</a>
             </div>
         </div>
     </div>
@@ -60,6 +60,35 @@
             <div class="card-body">
                 <p class="card-text">Execute Splunk queries directly with optional time ranges and see the results.</p>
                 <a href="{{ url_for('direct_query') }}" class="btn btn-primary">Query Splunk</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i data-feather="code" class="me-2"></i> Execute Rule
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">Convert a Sigma rule to a Splunk query, with optional execution and time range filtering.</p>
+                <a href="{{ url_for('sigma_execute') }}" class="btn btn-primary">Execute Rules</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-8">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i data-feather="search" class="me-2"></i> Pre-Scan Statistical Profiling
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">Generate statistical profiles and fast-pass queries for specific MITRE techniques to make hunting more efficient. This feature analyzes key fields from Sigma rules and creates targeted queries to identify potential indicators quickly.</p>
+                <a href="{{ url_for('profile_technique') }}" class="btn btn-primary">Profile Technique</a>
             </div>
         </div>
     </div>

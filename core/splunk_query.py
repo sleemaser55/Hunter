@@ -99,6 +99,10 @@ class SplunkQueryExecutor:
                     "results": []
                 }
         
+        # Ensure query begins with 'search' if not already present
+        if not query.strip().lower().startswith('search '):
+            query = f"search {query}"
+            
         # Don't automatically add index - use exactly what the user provided
         # Original code:
         # if "index=" not in query:
@@ -271,3 +275,172 @@ class SplunkQueryExecutor:
         except Exception as e:
             logger.error(f"Error getting field values for {field}: {str(e)}")
             return []
+            
+    def get_field_metadata(self, 
+                         index: str = "*", 
+                         earliest_time: str = "-24h", 
+                         latest_time: str = "now",
+                         sample_count: int = 1000) -> Dict[str, Dict[str, Any]]:
+        """
+        Get metadata about fields present in the Splunk index.
+        
+        Args:
+            index: Splunk index to search
+            earliest_time: Search time range start
+            latest_time: Search time range end
+            sample_count: Number of events to sample
+            
+        Returns:
+            Dictionary with field metadata (name, type, prevalence, etc.)
+        """
+        field_metadata = {}
+        
+        if not self.connected:
+            success = self.connect()
+            if not success:
+                logger.error("Cannot get field metadata: Not connected to Splunk")
+                return field_metadata
+        
+        try:
+            # First run a search to get the most common fields from a sample of events
+            sample_query = f"search index={index} | head {sample_count} | fieldsummary | table field count totalCount distinctCount"
+            
+            logger.info(f"Executing field metadata query: {sample_query}")
+            result = self.execute_query(
+                query=sample_query,
+                earliest_time=earliest_time,
+                latest_time=latest_time,
+                exec_mode="blocking"
+            )
+            
+            if result["status"] != "success":
+                logger.error(f"Failed to get field metadata: {result.get('error', 'Unknown error')}")
+                return field_metadata
+            
+            # Extract field metadata
+            for field_data in result["results"]:
+                if 'field' in field_data:
+                    field_name = field_data['field']
+                    
+                    # Skip internal Splunk fields
+                    if field_name.startswith('_') and field_name not in ['_time', '_raw']:
+                        continue
+                        
+                    # Calculate prevalence (percentage of events with this field)
+                    prevalence = 0
+                    if 'count' in field_data and 'totalCount' in field_data:
+                        count = int(field_data['count']) if field_data['count'] else 0
+                        total_count = int(field_data['totalCount']) if field_data['totalCount'] else 1
+                        if total_count > 0:
+                            prevalence = round((count / total_count) * 100, 2)
+                            
+                    # Store metadata
+                    field_metadata[field_name] = {
+                        'name': field_name,
+                        'prevalence': prevalence,
+                        'count': int(field_data.get('count', 0)),
+                        'total_count': int(field_data.get('totalCount', 0)),
+                        'distinct_count': int(field_data.get('distinctCount', 0))
+                    }
+            
+            # Now get sample values for common fields to help with mapping
+            for field_name, metadata in list(field_metadata.items()):
+                # Only get sample values for fields that appear in at least 1% of events
+                if metadata.get('prevalence', 0) >= 1:
+                    sample_query = f"search index={index} {field_name}=* | stats count by {field_name} | sort -count | head 5"
+                    
+                    # Execute the query to get sample values
+                    try:
+                        sample_result = self.execute_query(
+                            query=sample_query,
+                            earliest_time=earliest_time,
+                            latest_time=latest_time,
+                            exec_mode="blocking"
+                        )
+                        
+                        if sample_result["status"] == "success":
+                            # Store sample values
+                            sample_values = [r.get(field_name, "") for r in sample_result["results"]]
+                            field_metadata[field_name]['sample_values'] = [v for v in sample_values if v][:5]
+                            
+                    except Exception as e:
+                        logger.error(f"Error getting sample values for {field_name}: {str(e)}")
+            
+            return field_metadata
+            
+        except Exception as e:
+            logger.error(f"Error getting field metadata: {str(e)}")
+            return field_metadata
+            
+    def get_field_frequencies(self, 
+                           index: str = "*", 
+                           earliest_time: str = "-24h", 
+                           latest_time: str = "now",
+                           limit: int = 100) -> List[Dict[str, Any]]:
+        """
+        Get the most frequent fields in the Splunk index.
+        
+        Args:
+            index: Splunk index to search
+            earliest_time: Search time range start
+            latest_time: Search time range end
+            limit: Maximum number of fields to return
+            
+        Returns:
+            List of dictionaries with field frequency information
+        """
+        field_frequencies = []
+        
+        if not self.connected:
+            success = self.connect()
+            if not success:
+                logger.error("Cannot get field frequencies: Not connected to Splunk")
+                return field_frequencies
+        
+        try:
+            # Use the fieldsummary command to get field frequencies
+            query = f"search index={index} | fieldsummary | sort -count | head {limit}"
+            
+            logger.info(f"Executing field frequency query: {query}")
+            result = self.execute_query(
+                query=query,
+                earliest_time=earliest_time,
+                latest_time=latest_time,
+                exec_mode="blocking"
+            )
+            
+            if result["status"] != "success":
+                logger.error(f"Failed to get field frequencies: {result.get('error', 'Unknown error')}")
+                return field_frequencies
+            
+            # Extract field frequencies
+            for field_data in result["results"]:
+                if 'field' in field_data:
+                    field_name = field_data['field']
+                    
+                    # Skip internal Splunk fields
+                    if field_name.startswith('_') and field_name not in ['_time', '_raw']:
+                        continue
+                        
+                    # Calculate prevalence
+                    prevalence = 0
+                    if 'count' in field_data and 'totalCount' in field_data:
+                        count = int(field_data['count']) if field_data['count'] else 0
+                        total_count = int(field_data['totalCount']) if field_data['totalCount'] else 1
+                        if total_count > 0:
+                            prevalence = round((count / total_count) * 100, 2)
+                            
+                    # Add to results
+                    field_frequencies.append({
+                        'field': field_name,
+                        'count': int(field_data.get('count', 0)),
+                        'distinct_count': int(field_data.get('distinctCount', 0)),
+                        'total_count': int(field_data.get('totalCount', 0)),
+                        'prevalence': prevalence
+                    })
+            
+            return field_frequencies
+            
+        except Exception as e:
+            logger.error(f"Error getting field frequencies: {str(e)}")
+            return field_frequencies

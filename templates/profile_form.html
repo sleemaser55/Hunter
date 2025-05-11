@@ -1,0 +1,325 @@
+{% extends "base.html" %}
+
+{% block title %}Statistical Field Profiling{% endblock %}
+
+{% block styles %}
+<link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet">
+<style>
+    .technique-card {
+        cursor: pointer;
+        transition: all 0.2s ease-in-out;
+        height: 100%;
+    }
+    
+    .technique-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+    }
+    
+    .technique-card .card-body {
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .technique-card .card-title {
+        font-weight: 600;
+    }
+    
+    .technique-card .card-text {
+        flex-grow: 1;
+    }
+    
+    .tactic-label {
+        font-size: 0.8rem;
+        padding: 0.2rem 0.5rem;
+        border-radius: 0.25rem;
+        margin-right: 0.25rem;
+        margin-bottom: 0.25rem;
+        display: inline-block;
+        background-color: var(--bs-secondary);
+        color: white;
+    }
+    
+    .tech-id {
+        font-family: monospace;
+        color: var(--bs-gray-500);
+    }
+    
+    .rules-count {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background-color: var(--bs-primary);
+        color: white;
+        font-size: 0.8rem;
+        padding: 0.2rem 0.5rem;
+        border-radius: 0.25rem;
+    }
+    
+    #technique-search {
+        max-width: 500px;
+    }
+    
+    .technique-filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+    }
+    
+    .tactic-filter {
+        padding: 0.25rem 0.75rem;
+        border-radius: 0.25rem;
+        cursor: pointer;
+        transition: all 0.2s ease-in-out;
+        background-color: var(--bs-gray-800);
+    }
+    
+    .tactic-filter:hover, .tactic-filter.active {
+        background-color: var(--bs-primary);
+        color: white;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Statistical Field Profiling</h1>
+        <div>
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                <i data-feather="arrow-left"></i> Back to Home
+            </a>
+        </div>
+    </div>
+    
+    <div class="alert alert-info">
+        <h5><i data-feather="info" class="me-2"></i> About Statistical Field Profiling</h5>
+        <p>
+            Select a MITRE ATT&CK technique to analyze the key fields and values in your data. 
+            The statistical profiler will:
+        </p>
+        <ol>
+            <li>Extract key fields from Sigma rules associated with the selected technique</li>
+            <li>Execute statistical queries to identify frequent, rare, and unusual values</li>
+            <li>Run targeted "Fast Pass" queries for suspicious values before executing full Sigma rules</li>
+            <li>Prioritize results based on likelihood of detection</li>
+        </ol>
+    </div>
+    
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Time Range and Search Options</h5>
+        </div>
+        <div class="card-body">
+            <form id="profiling-options-form">
+                <div class="row">
+                    <div class="col-md-4">
+                        <label for="time-preset" class="form-label">Time Range Preset</label>
+                        <select class="form-select" id="time-preset">
+                            <option value="custom">Custom</option>
+                            <option value="realtime">Real-time (rt)</option>
+                            <option value="15m">Last 15 minutes</option>
+                            <option value="1h">Last hour</option>
+                            <option value="4h">Last 4 hours</option>
+                            <option value="24h" selected>Last 24 hours</option>
+                            <option value="7d">Last 7 days</option>
+                            <option value="30d">Last 30 days</option>
+                            <option value="alltime">All time</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="earliest-time" class="form-label">Earliest Time</label>
+                        <input type="text" class="form-control" id="earliest-time" value="-24h">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="latest-time" class="form-label">Latest Time</label>
+                        <input type="text" class="form-control" id="latest-time" value="now">
+                    </div>
+                </div>
+                
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        <label for="index" class="form-label">Index</label>
+                        <input type="text" class="form-control" id="index" value="*" placeholder="Enter index name or *">
+                    </div>
+                    <div class="col-md-6 d-flex justify-content-end align-items-end">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="run-prescan" checked>
+                            <label class="form-check-label" for="run-prescan">
+                                Run pre-scan profiling
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div class="mb-4">
+        <div class="d-flex justify-content-between align-items-center">
+            <h4>Select a MITRE ATT&CK Technique</h4>
+            <div class="mb-3">
+                <input type="text" class="form-control" id="technique-search" placeholder="Search techniques...">
+            </div>
+        </div>
+        
+        <div class="technique-filters" id="tactic-filters">
+            <div class="tactic-filter active" data-tactic="all">All Tactics</div>
+            {% for tactic in tactics %}
+                <div class="tactic-filter" data-tactic="{{ tactic.id }}">{{ tactic.name }}</div>
+            {% endfor %}
+        </div>
+        
+        <div class="row" id="techniques-container">
+            {% for technique in techniques %}
+                <div class="col-md-4 mb-4 technique-item" 
+                     data-name="{{ technique.name|lower }}" 
+                     data-id="{{ technique.id|lower }}"
+                     data-tactics="{{ technique.tactics|map(attribute='id')|join(' ') }}">
+                    <div class="card technique-card">
+                        <div class="card-body">
+                            <h5 class="card-title">
+                                {{ technique.name }}
+                                <span class="tech-id">{{ technique.id }}</span>
+                            </h5>
+                            <p class="card-text">{{ technique.description|truncate(150) }}</p>
+                            <div>
+                                {% for tactic in technique.tactics %}
+                                    <span class="tactic-label">{{ tactic.name }}</span>
+                                {% endfor %}
+                            </div>
+                            {% if technique.sigma_rules_count %}
+                                <span class="rules-count">{{ technique.sigma_rules_count }} rules</span>
+                            {% endif %}
+                        </div>
+                        <div class="card-footer">
+                            <button class="btn btn-primary btn-sm w-100 select-technique-btn" 
+                                    data-technique-id="{{ technique.id }}">
+                                <i data-feather="search"></i> Profile
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Initialize Feather icons
+    feather.replace();
+    
+    // Handle time preset changes
+    document.getElementById('time-preset').addEventListener('change', function() {
+        const preset = this.value;
+        const earliestInput = document.getElementById('earliest-time');
+        const latestInput = document.getElementById('latest-time');
+        
+        // Set earliest and latest time based on preset
+        switch(preset) {
+            case 'realtime':
+                earliestInput.value = 'rt';
+                latestInput.value = 'rt+1m';
+                break;
+            case '15m':
+                earliestInput.value = '-15m';
+                latestInput.value = 'now';
+                break;
+            case '1h':
+                earliestInput.value = '-1h';
+                latestInput.value = 'now';
+                break;
+            case '4h':
+                earliestInput.value = '-4h';
+                latestInput.value = 'now';
+                break;
+            case '24h':
+                earliestInput.value = '-24h';
+                latestInput.value = 'now';
+                break;
+            case '7d':
+                earliestInput.value = '-7d';
+                latestInput.value = 'now';
+                break;
+            case '30d':
+                earliestInput.value = '-30d';
+                latestInput.value = 'now';
+                break;
+            case 'alltime':
+                earliestInput.value = '0';
+                latestInput.value = 'now';
+                break;
+            case 'custom':
+                // Don't change the values
+                break;
+        }
+        
+        // Disable direct editing if using preset (except custom)
+        const disableInputs = preset !== 'custom';
+        earliestInput.readOnly = disableInputs;
+        latestInput.readOnly = disableInputs;
+    });
+    
+    // Handle technique search
+    document.getElementById('technique-search').addEventListener('input', function() {
+        const searchTerm = this.value.toLowerCase();
+        const techniqueItems = document.querySelectorAll('.technique-item');
+        
+        techniqueItems.forEach(item => {
+            const name = item.getAttribute('data-name');
+            const id = item.getAttribute('data-id');
+            
+            if (name.includes(searchTerm) || id.includes(searchTerm)) {
+                item.style.display = '';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    });
+    
+    // Handle tactic filtering
+    document.querySelectorAll('.tactic-filter').forEach(filter => {
+        filter.addEventListener('click', function() {
+            // Update active state
+            document.querySelectorAll('.tactic-filter').forEach(f => f.classList.remove('active'));
+            this.classList.add('active');
+            
+            const tactic = this.getAttribute('data-tactic');
+            const techniqueItems = document.querySelectorAll('.technique-item');
+            
+            if (tactic === 'all') {
+                techniqueItems.forEach(item => {
+                    item.style.display = '';
+                });
+            } else {
+                techniqueItems.forEach(item => {
+                    const tactics = item.getAttribute('data-tactics');
+                    
+                    if (tactics.includes(tactic)) {
+                        item.style.display = '';
+                    } else {
+                        item.style.display = 'none';
+                    }
+                });
+            }
+        });
+    });
+    
+    // Handle technique selection
+    document.querySelectorAll('.select-technique-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            const techniqueId = this.getAttribute('data-technique-id');
+            const earliest = document.getElementById('earliest-time').value;
+            const latest = document.getElementById('latest-time').value;
+            const index = document.getElementById('index').value;
+            const runPrescan = document.getElementById('run-prescan').checked;
+            
+            // Navigate to profiling page
+            window.location.href = `/profile_technique?technique_id=${techniqueId}&earliest=${encodeURIComponent(earliest)}&latest=${encodeURIComponent(latest)}&index=${encodeURIComponent(index)}&run_prescan=${runPrescan}`;
+        });
+    });
+</script>
+{% endblock %}

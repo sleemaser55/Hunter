@@ -4,118 +4,7 @@
 
 {% block styles %}
 <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet">
-<style>
-    #mindmap-container {
-        height: 600px;
-        border: 1px solid var(--bs-gray-700);
-        border-radius: 5px;
-    }
-    
-    .node circle {
-        fill: var(--bs-primary);
-        stroke: var(--bs-gray-200);
-        stroke-width: 1.5px;
-    }
-    
-    .node.search circle {
-        fill: var(--bs-info);
-    }
-    
-    .node.result circle {
-        fill: var(--bs-success);
-    }
-    
-    .node.field circle {
-        fill: var(--bs-warning);
-    }
-    
-    .node.value circle {
-        fill: var(--bs-light);
-    }
-    
-    .node.technique circle {
-        fill: var(--bs-danger);
-    }
-    
-    .node text {
-        font-size: 12px;
-    }
-    
-    .link {
-        fill: none;
-        stroke: var(--bs-gray-600);
-        stroke-width: 1.5px;
-    }
-    
-    .raw-results {
-        white-space: pre-wrap;
-        font-family: monospace;
-        max-height: 600px;
-        overflow-y: auto;
-        background-color: var(--bs-gray-900);
-        color: var(--bs-light);
-        padding: 10px;
-        border-radius: 5px;
-    }
-    
-    .card-body {
-        padding: 1.5rem;
-    }
-    
-    .no-results {
-        color: var(--bs-gray-500);
-        text-align: center;
-        margin-top: 2rem;
-    }
-    
-    .pivot-link {
-        cursor: pointer;
-        text-decoration: underline;
-        color: var(--bs-link-color);
-    }
-
-    .results-table {
-        width: 100%;
-        margin-bottom: 1rem;
-        color: var(--bs-table-color);
-        vertical-align: top;
-        border-color: var(--bs-table-border-color);
-    }
-
-    .results-table th,
-    .results-table td {
-        padding: 0.5rem;
-        border-bottom: 1px solid var(--bs-gray-700);
-    }
-
-    .ttp-badge {
-        display: inline-block;
-        margin: 0.2rem;
-        padding: 0.35rem 0.5rem;
-        font-size: 0.75rem;
-        font-weight: 700;
-        line-height: 1;
-        text-align: center;
-        white-space: nowrap;
-        vertical-align: baseline;
-        border-radius: 0.375rem;
-    }
-
-    .high-match {
-        background-color: var(--bs-danger);
-        color: white;
-    }
-
-    .medium-match {
-        background-color: var(--bs-warning);
-        color: var(--bs-dark);
-    }
-
-    .low-match {
-        background-color: var(--bs-info);
-        color: white;
-    }
-</style>
+<link href="{{ url_for('static', filename='css/visualizations.css') }}" rel="stylesheet">
 {% endblock %}
 
 {% block content %}
@@ -255,6 +144,9 @@
 
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="{{ url_for('static', filename='js/field_pivot.js') }}"></script>
+<script src="{{ url_for('static', filename='js/mindmap_visualization.js') }}"></script>
+<script src="{{ url_for('static', filename='js/ttp_visualization.js') }}"></script>
 <script>
     // Initialize Feather icons
     feather.replace();
@@ -263,7 +155,12 @@
     let resultsData = [];
     let mappingsData = {};
     let mindmapData = {};
-    let d3Simulation = null;
+    let originalQuery = '';
+    
+    // Create visualization objects
+    const fieldPivot = new FieldPivot();
+    const mindMapViz = new MindMapVisualization('mindmap-container');
+    const ttpViz = new TTPVisualization('ttp-container');
 
     // Fetch results data on page load
     document.addEventListener('DOMContentLoaded', function() {
@@ -291,16 +188,29 @@
                 resultsData = data.results || [];
                 mappingsData = data.mappings || {};
                 mindmapData = data.mindmap || {};
+                originalQuery = data.query || '';
 
+                // Initialize field pivot
+                fieldPivot.init(originalQuery);
+                
                 // Update display
                 updateResultsCount();
                 populateTable();
                 updateRawView();
-                renderTTPMappings();
                 
-                // Init mind map when tab is shown
+                // Initialize TTP visualization
+                ttpViz.init(mappingsData, resultsData);
+                
+                // Initialize mind map when tab is shown (lazy loading)
                 document.getElementById('mindmap-tab').addEventListener('shown.bs.tab', function (e) {
-                    initMindMap();
+                    mindMapViz.init(mindmapData, fieldPivot);
+                });
+                
+                // Handle window resize for mind map
+                window.addEventListener('resize', function() {
+                    if (document.getElementById('mindmap-tab').classList.contains('active')) {
+                        mindMapViz.resize();
+                    }
                 });
             })
             .catch(error => {
@@ -312,6 +222,7 @@
     function showNoResults(message) {
         document.getElementById('table-container').innerHTML = `<div class="no-results">${message}</div>`;
         document.getElementById('mindmap-container').innerHTML = `<div class="no-results">${message}</div>`;
+        document.getElementById('ttp-container').innerHTML = `<div class="no-results">${message}</div>`;
         document.getElementById('raw-results').textContent = message;
         document.getElementById('results-count').textContent = "No results found";
     }
@@ -327,8 +238,8 @@
             return;
         }
 
-        // Get common fields from results
-        const fields = getCommonFields(resultsData);
+        // Get common fields from results using the field pivot helper
+        const fields = fieldPivot.getCommonFields(resultsData);
         
         // Build table header
         const headerRow = document.getElementById('results-table-header');
@@ -354,10 +265,8 @@
                     
                     // Create a pivot link if value is not too long
                     if (typeof value === 'string' && value.length < 100) {
-                        const pivotLink = document.createElement('a');
-                        pivotLink.className = 'pivot-link';
-                        pivotLink.textContent = value;
-                        pivotLink.onclick = () => openPivotModal(field, value);
+                        // Use the field pivot helper to create the link
+                        const pivotLink = fieldPivot.createPivotLink(field, value);
                         td.appendChild(pivotLink);
                     } else {
                         td.textContent = value;
@@ -384,43 +293,6 @@
         });
     }
 
-    function getCommonFields(results) {
-        // Get all fields that appear in at least 50% of results
-        const fieldCounts = {};
-        const threshold = Math.max(1, Math.floor(results.length * 0.5));
-        
-        results.forEach(result => {
-            Object.keys(result).forEach(field => {
-                fieldCounts[field] = (fieldCounts[field] || 0) + 1;
-            });
-        });
-        
-        // Sort fields by count
-        return Object.keys(fieldCounts)
-            .filter(field => fieldCounts[field] >= threshold)
-            // Prioritize some common useful fields
-            .sort((a, b) => {
-                const priorityFields = [
-                    'host', 'source', 'sourcetype', 'CommandLine', 'Image', 
-                    'User', 'time', 'timestamp', 'EventID'
-                ];
-                
-                const aPriority = priorityFields.indexOf(a);
-                const bPriority = priorityFields.indexOf(b);
-                
-                if (aPriority !== -1 && bPriority !== -1) {
-                    return aPriority - bPriority;
-                }
-                
-                if (aPriority !== -1) return -1;
-                if (bPriority !== -1) return 1;
-                
-                return fieldCounts[b] - fieldCounts[a];
-            })
-            // Limit to 10 fields
-            .slice(0, 10);
-    }
-
     function updateRawView() {
         const rawResults = document.getElementById('raw-results');
         
@@ -443,235 +315,6 @@
         
         rawResults.textContent = text;
     }
-
-    function renderTTPMappings() {
-        const container = document.getElementById('ttp-container');
-        
-        if (!mappingsData || !mappingsData.mappings || !mappingsData.mappings.length) {
-            container.innerHTML = '<div class="no-results">No TTP mappings found</div>';
-            return;
-        }
-        
-        let html = '<div class="table-responsive"><table class="results-table mt-3">';
-        html += '<thead><tr><th>Result #</th><th>MITRE Technique</th><th>Confidence</th><th>Tactics</th></tr></thead><tbody>';
-        
-        mappingsData.mappings.forEach((mapping) => {
-            const resultIndex = mapping.result_index;
-            
-            if (mapping.matches && mapping.matches.length) {
-                mapping.matches.forEach((match) => {
-                    const confidence = match.similarity_score;
-                    let confidenceClass = 'low-match';
-                    
-                    if (confidence >= 0.7) confidenceClass = 'high-match';
-                    else if (confidence >= 0.4) confidenceClass = 'medium-match';
-                    
-                    html += `<tr>`;
-                    html += `<td>${resultIndex + 1}</td>`;
-                    html += `<td>
-                                <a href="https://attack.mitre.org/techniques/${match.technique_id.replace('T', '')}" target="_blank">
-                                    ${match.technique_id}: ${match.technique_name}
-                                </a>
-                             </td>`;
-                    html += `<td><span class="ttp-badge ${confidenceClass}">${Math.round(confidence * 100)}%</span></td>`;
-                    html += `<td>${match.tactics.join(', ')}</td>`;
-                    html += `</tr>`;
-                });
-            } else {
-                html += `<tr><td>${resultIndex + 1}</td><td colspan="3">No matches found</td></tr>`;
-            }
-        });
-        
-        html += '</tbody></table></div>';
-        container.innerHTML = html;
-    }
-
-    function initMindMap() {
-        // Clear any existing visualization
-        document.getElementById('mindmap-container').innerHTML = '';
-        
-        if (!mindmapData || !mindmapData.nodes || !mindmapData.nodes.length) {
-            document.getElementById('mindmap-container').innerHTML = '<div class="no-results">No data available for mind map visualization</div>';
-            return;
-        }
-        
-        // Set up mind map visualization
-        const width = document.getElementById('mindmap-container').clientWidth;
-        const height = 600;
-        
-        // Create SVG
-        const svg = d3.select('#mindmap-container')
-            .append('svg')
-            .attr('width', width)
-            .attr('height', height);
-            
-        // Create groups for links and nodes
-        const g = svg.append('g');
-        const linkGroup = g.append('g').attr('class', 'links');
-        const nodeGroup = g.append('g').attr('class', 'nodes');
-        
-        // Create zoom behavior
-        const zoom = d3.zoom()
-            .scaleExtent([0.1, 4])
-            .on('zoom', (event) => {
-                g.attr('transform', event.transform);
-            });
-            
-        svg.call(zoom);
-        
-        // Center the view
-        svg.call(zoom.transform, d3.zoomIdentity.translate(width / 2, height / 2));
-        
-        // Create the simulation
-        d3Simulation = d3.forceSimulation()
-            .force('link', d3.forceLink().id(d => d.id).distance(100))
-            .force('charge', d3.forceManyBody().strength(-300))
-            .force('center', d3.forceCenter(0, 0))
-            .force('collide', d3.forceCollide(30));
-            
-        // Create the links
-        const links = linkGroup
-            .selectAll('line')
-            .data(mindmapData.links)
-            .enter()
-            .append('line')
-            .attr('class', 'link')
-            .style('stroke-width', d => d.value);
-            
-        // Create the nodes
-        const nodes = nodeGroup
-            .selectAll('.node')
-            .data(mindmapData.nodes)
-            .enter()
-            .append('g')
-            .attr('class', d => `node ${d.group}`)
-            .call(d3.drag()
-                .on('start', dragStarted)
-                .on('drag', dragged)
-                .on('end', dragEnded));
-                
-        // Add circles to nodes
-        nodes.append('circle')
-            .attr('r', d => d.group === 'root' ? 20 : (d.group === 'technique' ? 15 : 10))
-            .style('fill', d => {
-                if (d.group === 'technique') {
-                    // Color based on confidence score if available
-                    const score = d.score || 0;
-                    if (score >= 0.7) return '#dc3545'; // High match (danger)
-                    if (score >= 0.4) return '#ffc107'; // Medium match (warning)
-                    return '#0dcaf0'; // Low match (info)
-                }
-            });
-            
-        // Add text to nodes
-        nodes.append('text')
-            .attr('dx', 15)
-            .attr('dy', 5)
-            .text(d => d.label)
-            .style('font-weight', d => d.group === 'root' ? 'bold' : 'normal');
-            
-        // Handle clicks on nodes
-        nodes.on('click', function(event, d) {
-            if (d.group === 'value') {
-                openPivotModal(d.field, d.label);
-            }
-        });
-        
-        // Add tooltips
-        nodes.append('title')
-            .text(d => d.label);
-            
-        // Start the simulation
-        d3Simulation
-            .nodes(mindmapData.nodes)
-            .on('tick', ticked);
-            
-        d3Simulation.force('link')
-            .links(mindmapData.links);
-            
-        // Simulation tick function
-        function ticked() {
-            links
-                .attr('x1', d => d.source.x)
-                .attr('y1', d => d.source.y)
-                .attr('x2', d => d.target.x)
-                .attr('y2', d => d.target.y);
-                
-            nodes
-                .attr('transform', d => `translate(${d.x},${d.y})`);
-        }
-        
-        // Drag functions
-        function dragStarted(event, d) {
-            if (!event.active) d3Simulation.alphaTarget(0.3).restart();
-            d.fx = d.x;
-            d.fy = d.y;
-        }
-        
-        function dragged(event, d) {
-            d.fx = event.x;
-            d.fy = event.y;
-        }
-        
-        function dragEnded(event, d) {
-            if (!event.active) d3Simulation.alphaTarget(0);
-            d.fx = null;
-            d.fy = null;
-        }
-    }
-
-    function openPivotModal(field, value) {
-        // Set pivot modal fields
-        document.getElementById('pivot-field').value = field;
-        document.getElementById('pivot-value').value = value;
-        
-        // Generate the new query
-        updatePivotQuery();
-        
-        // Set operator change listener
-        document.getElementById('pivot-operator').addEventListener('change', updatePivotQuery);
-        
-        // Show the modal
-        const modal = new bootstrap.Modal(document.getElementById('pivotModal'));
-        modal.show();
-    }
-
-    function updatePivotQuery() {
-        const field = document.getElementById('pivot-field').value;
-        const value = document.getElementById('pivot-value').value;
-        const operator = document.getElementById('pivot-operator').value;
-        
-        let queryComponent = '';
-        
-        switch (operator) {
-            case 'equals':
-                queryComponent = `${field}="${value}"`;
-                break;
-            case 'contains':
-                queryComponent = `${field}=*${value}*`;
-                break;
-            case 'startswith':
-                queryComponent = `${field}=${value}*`;
-                break;
-            case 'endswith':
-                queryComponent = `${field}=*${value}`;
-                break;
-            case 'notequals':
-                queryComponent = `${field}!="${value}"`;
-                break;
-        }
-        
-        document.getElementById('pivot-query').value = queryComponent;
-    }
-
-    // Set up pivot execution
-    document.getElementById('pivot-execute').addEventListener('click', function() {
-        const query = document.getElementById('pivot-query').value;
-        
-        if (query) {
-            window.location.href = `/direct_query?query=${encodeURIComponent(query)}`;
-        }
-    });
 
     // JSON Export functionality
     document.getElementById('export-json').addEventListener('click', function() {

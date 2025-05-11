@@ -276,13 +276,85 @@ def execute_rule(rule_id):
     
     return jsonify(result)
 
-@app.route('/hunt', methods=['POST'])
+@app.route('/profile_technique', methods=['GET', 'POST'])
+def profile_technique():
+    """Perform statistical profiling for a MITRE technique"""
+    if request.method == 'GET':
+        # Render the form for selecting technique and timerange
+        techniques = mitre_parser.get_techniques()
+        return render_template('profile_form.html', techniques=techniques)
+    
+    # Handle POST request
+    data = request.json or {}
+    technique_id = data.get('technique_id') or request.args.get('technique_id')
+    
+    if not technique_id:
+        return jsonify({'error': 'No technique ID provided'}), 400
+    
+    earliest = data.get('earliest') or request.args.get('earliest', '-24h')
+    latest = data.get('latest') or request.args.get('latest', 'now')
+    index = data.get('index') or request.args.get('index', '*')
+    
+    # Check if technique exists
+    technique = mitre_parser.get_technique_by_id(technique_id)
+    if not technique:
+        return jsonify({'error': f'Technique {technique_id} not found'}), 404
+    
+    # Import field profiler here to avoid circular imports
+    from app import field_profiler
+    
+    # Perform profiling
+    profiling_result = field_profiler.profile_technique(
+        technique_id=technique_id,
+        index=index,
+        earliest_time=earliest,
+        latest_time=latest
+    )
+    
+    # For API requests, return JSON
+    if request.headers.get('Accept') == 'application/json' or request.is_json:
+        return jsonify(profiling_result)
+    
+    # For browser requests, render template
+    return render_template(
+        'profile_results.html',
+        technique=technique,
+        technique_id=technique_id,
+        profiled_fields=profiling_result.get('profiled_fields', {}),
+        profiling_results=profiling_result.get('profiling_results', {}),
+        fast_pass_queries=profiling_result.get('fast_pass_queries', {}),
+        fast_pass_results=profiling_result.get('fast_pass_results', {}),
+        earliest_time=earliest,
+        latest_time=latest
+    )
+
+@app.route('/hunt', methods=['GET', 'POST'])
 def execute_hunt():
     """Execute a hunt for a MITRE technique"""
-    data = request.json
-    
-    if not data or 'technique_id' not in data:
-        return jsonify({'error': 'No technique ID provided'}), 400
+    # Handle GET request with parameters
+    if request.method == 'GET':
+        technique_id = request.args.get('technique_id')
+        earliest = request.args.get('earliest', '-24h')
+        latest = request.args.get('latest', 'now')
+        count = int(request.args.get('count', '100'))
+        
+        if not technique_id:
+            # Redirect to profile form
+            return redirect(url_for('profile_technique'))
+            
+        # Create a data dictionary to reuse the POST handling logic
+        data = {
+            'technique_id': technique_id,
+            'earliest': earliest,
+            'latest': latest,
+            'count': count
+        }
+    else:
+        # For POST requests, use the JSON data
+        data = request.json
+        
+        if not data or 'technique_id' not in data:
+            return jsonify({'error': 'No technique ID provided'}), 400
     
     technique_id = data['technique_id']
     earliest = data.get('earliest', '-24h')
@@ -293,6 +365,18 @@ def execute_hunt():
     technique = mitre_parser.get_technique_by_id(technique_id)
     if not technique:
         return jsonify({'error': f'Technique {technique_id} not found'}), 404
+    
+    # Run pre-scan profiling if requested
+    run_prescan = data.get('run_prescan', True)
+    prescan_results = None
+    
+    if run_prescan:
+        from app import field_profiler
+        prescan_results = field_profiler.profile_technique(
+            technique_id=technique_id,
+            earliest_time=earliest,
+            latest_time=latest
+        )
     
     # Get Sigma rules for the technique
     sigma_rules = sigma_loader.get_rules_by_technique(technique_id)
@@ -349,6 +433,10 @@ def execute_hunt():
         'latest': latest
     }
     
+    # If prescan was run, include those results
+    if prescan_results:
+        response['prescan_results'] = prescan_results
+    
     return jsonify(response)
 
 @app.route('/mappings')
@@ -397,6 +485,90 @@ def remove_mapping():
     else:
         return jsonify({'error': 'Mapping not found'}), 404
 
+@app.route('/mappings/manager', methods=['GET'])
+def mapping_manager():
+    """Render the field mapping manager page"""
+    # Get all current mappings
+    current_mappings = field_mapper.get_all_mappings()
+    
+    # Extract common Sigma fields from default mappings
+    common_sigma_fields = field_mapper.extract_common_sigma_fields()
+    
+    # Determine if connected to Splunk for auto-detection
+    global splunk_connected
+    if not splunk_connected:
+        splunk_connected = splunk_query.connect()
+    
+    return render_template('mapping_manager.html', 
+                          current_mappings=current_mappings,
+                          common_sigma_fields=common_sigma_fields,
+                          splunk_connected=splunk_connected)
+
+@app.route('/mappings/detect-auto', methods=['POST'])
+def detect_auto_mappings():
+    """Auto-detect field mappings based on Splunk field metadata"""
+    data = request.json or {}
+    
+    # Default to all categories if none specified
+    categories = data.get('categories', None)
+    earliest_time = data.get('earliest_time', '-24h')
+    latest_time = data.get('latest_time', 'now')
+    
+    # Extract Sigma fields to map
+    common_sigma_fields = field_mapper.extract_common_sigma_fields(categories)
+    
+    # Ensure connected to Splunk
+    global splunk_connected
+    if not splunk_connected:
+        splunk_connected = splunk_query.connect()
+        
+    if not splunk_connected:
+        return jsonify({
+            'status': 'error',
+            'message': 'Not connected to Splunk'
+        }), 500
+    
+    # Get Splunk field metadata
+    splunk_fields = splunk_query.get_field_metadata(
+        earliest_time=earliest_time,
+        latest_time=latest_time
+    )
+    
+    if not splunk_fields:
+        return jsonify({
+            'status': 'error',
+            'message': 'Failed to retrieve Splunk field metadata'
+        }), 500
+    
+    # Auto-detect mappings
+    suggested_mappings = field_mapper.auto_detect_mappings(
+        sigma_fields=common_sigma_fields,
+        splunk_field_metadata=splunk_fields
+    )
+    
+    return jsonify({
+        'status': 'success',
+        'suggested_mappings': suggested_mappings,
+        'field_count': sum(len(fields) for category, fields in suggested_mappings.items())
+    })
+
+@app.route('/mappings/apply-suggested', methods=['POST'])
+def apply_suggested_mappings():
+    """Apply suggested mappings that have been approved by the user"""
+    data = request.json
+    
+    if not data or 'approved_mappings' not in data:
+        return jsonify({'error': 'No approved mappings provided'}), 400
+    
+    approved_mappings = data['approved_mappings']
+    
+    success = field_mapper.apply_suggested_mappings(approved_mappings)
+    
+    if success:
+        return jsonify({'status': 'success'})
+    else:
+        return jsonify({'error': 'Failed to apply suggested mappings'}), 500
+
 @app.route('/direct-query')
 def direct_query():
     """Render the direct Splunk query page"""
@@ -425,18 +597,14 @@ def view_results():
 def get_results(result_id):
     """API endpoint to get query results"""
     from app import ttp_mapper
+    import os
+    import json
+    import traceback
     
     # Query results are stored in memory for now
     # In a production app, these would be stored in a database
-    # Let's simulate retrieving results with some test data if needed
-    
-    # Check if we have saved results for this ID
-    # Let's assume we do for now - normally this would be fetched from a database
     try:
         # Load results from saved JSON file (if exists)
-        import os
-        import json
-        
         results_dir = os.path.join(app.root_path, 'data', 'results')
         os.makedirs(results_dir, exist_ok=True)
         
@@ -449,11 +617,22 @@ def get_results(result_id):
             # Get the results list from the data
             results = result_data.get('results', [])
             
-            # Map results to MITRE ATT&CK techniques
-            mappings = ttp_mapper.map_results_to_techniques(results)
-            
-            # Create mind map data
-            mindmap = ttp_mapper.create_mindmap_data(results, mappings)
+            # Only process TTP mappings if we have results
+            if results:
+                try:
+                    # Map results to MITRE ATT&CK techniques
+                    mappings = ttp_mapper.map_results_to_techniques(results)
+                    
+                    # Create mind map data
+                    mindmap = ttp_mapper.create_mindmap_data(results, mappings)
+                except Exception as mapping_error:
+                    logger.error(f"Error in TTP mapping: {str(mapping_error)}")
+                    logger.error(traceback.format_exc())
+                    mappings = {"mappings": []}
+                    mindmap = {"nodes": [], "links": []}
+            else:
+                mappings = {"mappings": []}
+                mindmap = {"nodes": [], "links": []}
             
             return jsonify({
                 'query': result_data.get('query', ''),
@@ -467,6 +646,7 @@ def get_results(result_id):
             
     except Exception as e:
         logger.error(f"Error retrieving results: {str(e)}")
+        logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
 @app.errorhandler(404)

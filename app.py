@@ -9,6 +9,7 @@ from core.sigma_loader import SigmaLoader
 from core.splunk_query import SplunkQueryExecutor
 from core.field_mapper import FieldMapper
 from core.ttp_mapper import TTPMapper
+from core.field_profiler import FieldProfiler
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -25,6 +26,7 @@ sigma_loader = SigmaLoader()
 splunk_query = SplunkQueryExecutor()
 field_mapper = FieldMapper()
 ttp_mapper = TTPMapper(mitre_parser)
+field_profiler = FieldProfiler(sigma_loader, field_mapper, splunk_query)
 
 # Connect to Splunk (done here so we don't have to reconnect for every request)
 splunk_connected = splunk_query.connect()
