@@ -7,6 +7,9 @@ class TimelineVisualization {
     render(data) {
         // Clear previous visualization
         this.container.innerHTML = '';
+        
+        // Group events by severity/suspicion score
+        const groupedEvents = this._groupEventsBySeverity(data.events);
 
         const timelineDiv = document.createElement('div');
         timelineDiv.className = 'attack-timeline';

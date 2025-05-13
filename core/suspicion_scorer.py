@@ -92,8 +92,22 @@ class SuspicionScorer:
         }
         
     def score_event(self, event: Dict[str, Any]) -> float:
-        """Score an individual event based on multiple factors"""
+        """Score an individual event based on multiple factors and behavioral patterns"""
         base_score = 0
+        context_score = self._evaluate_context(event)
+        behavioral_score = self._analyze_behavioral_patterns(event)
+        combined_score = (base_score + context_score + behavioral_score) / 3
+        return min(100, max(0, combined_score))
+        
+    def _evaluate_context(self, event: Dict[str, Any]) -> float:
+        score = 0
+        # Add context evaluation logic
+        return score
+        
+    def _analyze_behavioral_patterns(self, event: Dict[str, Any]) -> float:
+        score = 0
+        # Add behavioral analysis logic
+        return score
         
         # Check command patterns
         command = str(event.get('CommandLine', '')).lower()
