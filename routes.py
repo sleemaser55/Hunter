@@ -244,6 +244,37 @@ def get_apt_details(apt_id):
         'unavailable_techniques': unavailable
     })
 
+@app.route('/api/hunt/refine', methods=['POST'])
+def refine_hunt():
+    """Refine hunt results based on analyst feedback"""
+    data = request.json
+    if not data or 'hunt_id' not in data:
+        return jsonify({'error': 'Missing hunt ID'}), 400
+        
+    hunt = hunt_manager.get_hunt(data['hunt_id'])
+    if not hunt:
+        return jsonify({'error': 'Hunt not found'}), 404
+
+    # Apply feedback filters
+    if 'exclude_fields' in data:
+        hunt.excluded_fields.extend(data['exclude_fields'])
+    if 'exclude_values' in data:
+        for field, values in data['exclude_values'].items():
+            if field not in hunt.excluded_values:
+                hunt.excluded_values[field] = []
+            hunt.excluded_values[field].extend(values)
+
+    # Record feedback
+    hunt.feedback_history.append({
+        'timestamp': datetime.datetime.now().isoformat(),
+        'feedback': data
+    })
+
+    # Re-run hunt with updated filters
+    hunt_manager.rerun_hunt_with_feedback(hunt.id)
+    
+    return jsonify({'success': True, 'hunt_id': hunt.id})
+
 @app.route('/api/hunt/apt/start', methods=['POST'])
 def start_apt_hunt():
     """Start APT-based hunt"""

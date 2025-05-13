@@ -1,3 +1,47 @@
+function addFeedbackControls(container, data) {
+    const controls = document.createElement('div');
+    controls.className = 'feedback-controls';
+    
+    // Add field exclusion
+    const fieldSelect = document.createElement('select');
+    fieldSelect.multiple = true;
+    Object.keys(data.fields || {}).forEach(field => {
+        const option = document.createElement('option');
+        option.value = field;
+        option.text = field;
+        fieldSelect.appendChild(option);
+    });
+
+    // Add exclude button
+    const excludeBtn = document.createElement('button');
+    excludeBtn.textContent = 'Exclude Selected';
+    excludeBtn.onclick = () => {
+        const selectedFields = Array.from(fieldSelect.selectedOptions).map(opt => opt.value);
+        submitFeedback({
+            hunt_id: data.hunt_id,
+            exclude_fields: selectedFields
+        });
+    };
+
+    controls.appendChild(fieldSelect);
+    controls.appendChild(excludeBtn);
+    container.appendChild(controls);
+}
+
+function submitFeedback(feedback) {
+    fetch('/api/hunt/refine', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(feedback)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        }
+    });
+}
+
 function createTimeline(data) {
     const container = document.getElementById('timeline-container');
     container.innerHTML = '';

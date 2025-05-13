@@ -23,6 +23,9 @@ class HuntResult:
     status: str
     strict_mode: bool = True
     filters: Dict = field(default_factory=dict)
+    excluded_fields: List[str] = field(default_factory=list)
+    excluded_values: Dict[str, List[str]] = field(default_factory=dict)
+    feedback_history: List[Dict] = field(default_factory=list)
     priority_queue: List = field(default_factory=list)
     correlated_events: List = field(default_factory=list)
     attack_timeline: Dict = field(default_factory=dict)
