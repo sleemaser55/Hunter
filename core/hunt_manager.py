@@ -7,6 +7,8 @@ import sqlite3
 import threading
 from queue import Queue
 
+from dataclasses import dataclass, field
+
 @dataclass
 class HuntResult:
     id: str
@@ -90,6 +92,12 @@ class HuntManager:
         if query_result.get('matches', []):
             hunt.matched_queries += 1
             hunt.results[query_result['query_id']] = query_result
+            
+            # Correlate events and update timeline
+            correlation_engine = CorrelationEngine()
+            correlated_data = correlation_engine.correlate_events(query_result.get('matches', []))
+            hunt.correlated_events = correlated_data['chains']
+            hunt.attack_timeline = correlated_data['timeline']
 
         self._save_hunt(hunt)
         self.result_queue.put((hunt_id, query_result))

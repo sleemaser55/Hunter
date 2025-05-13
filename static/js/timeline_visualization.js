@@ -1,85 +1,69 @@
-
 class TimelineVisualization {
-    constructor(containerId) {
-        this.container = document.getElementById(containerId);
-        this.timelineData = null;
+    constructor(container) {
+        this.container = container;
+        this.timeline = null;
     }
 
     render(data) {
-        this.timelineData = data;
+        // Clear previous visualization
         this.container.innerHTML = '';
 
-        const timeline = document.createElement('div');
-        timeline.className = 'timeline';
+        const timelineDiv = document.createElement('div');
+        timelineDiv.className = 'attack-timeline';
 
-        // Create timeline entries for each tactic
-        Object.entries(data.timeline).forEach(([tactic, events]) => {
-            const tacticGroup = this.createTacticGroup(tactic, events);
-            timeline.appendChild(tacticGroup);
+        // Create timeline sections for each tactic
+        Object.entries(data.tactics).forEach(([tactic, events]) => {
+            const tacticSection = this._createTacticSection(tactic, events);
+            timelineDiv.appendChild(tacticSection);
         });
 
-        this.container.appendChild(timeline);
+        this.container.appendChild(timelineDiv);
     }
 
-    createTacticGroup(tactic, events) {
-        const group = document.createElement('div');
-        group.className = 'timeline-group';
+    _createTacticSection(tactic, events) {
+        const section = document.createElement('div');
+        section.className = 'timeline-section';
 
         const header = document.createElement('h3');
         header.textContent = tactic;
-        group.appendChild(header);
+        section.appendChild(header);
+
+        const eventList = document.createElement('ul');
+        eventList.className = 'timeline-events';
 
         events.forEach(event => {
-            const eventEl = this.createEventElement(event);
-            group.appendChild(eventEl);
+            const eventItem = this._createEventItem(event);
+            eventList.appendChild(eventItem);
         });
 
-        return group;
+        section.appendChild(eventList);
+        return section;
     }
 
-    createEventElement(event) {
-        const el = document.createElement('div');
-        el.className = 'timeline-event';
-        el.dataset.suspicionScore = event.suspicion_score || 0;
+    _createEventItem(event) {
+        const item = document.createElement('li');
+        item.className = 'timeline-event';
 
-        const time = document.createElement('div');
+        const time = document.createElement('span');
         time.className = 'event-time';
-        time.textContent = new Date(event.timestamp).toLocaleString();
+        time.textContent = new Date(event._time).toLocaleString();
 
-        const desc = document.createElement('div');
-        desc.className = 'event-description';
-        desc.textContent = event.description;
+        const description = document.createElement('span');
+        description.className = 'event-description';
+        description.textContent = event._raw;
 
-        const score = document.createElement('div');
-        score.className = 'event-score';
-        score.textContent = `Score: ${Math.round((event.suspicion_score || 0) * 100)}%`;
-
-        el.appendChild(time);
-        el.appendChild(desc);
-        el.appendChild(score);
+        item.appendChild(time);
+        item.appendChild(description);
 
         // Add click handler for pivoting
-        el.addEventListener('click', () => this.handleEventClick(event));
+        item.addEventListener('click', () => this._pivotToEvent(event));
 
-        return el;
+        return item;
     }
 
-    handleEventClick(event) {
-        // Emit custom event for pivot handling
-        const pivotEvent = new CustomEvent('timelinePivot', {
-            detail: {
-                event: event,
-                type: 'timeline'
-            }
-        });
-        document.dispatchEvent(pivotEvent);
-    }
-
-    filterBySuspicionScore(minScore) {
-        const events = this.container.querySelectorAll('.timeline-event');
-        events.forEach(event => {
-            const score = parseFloat(event.dataset.suspicionScore);
-            event.style.display = score >= minScore ? 'block' : 'none';
-        });
+    _pivotToEvent(event) {
+        // Implement pivot logic
+        console.log('Pivot to event:', event);
+        // Trigger a new hunt based on selected event attributes
     }
 }

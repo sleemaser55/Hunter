@@ -1,99 +1,77 @@
-import networkx as nx
+from typing import List, Dict, Any
 from datetime import datetime
-from typing import Dict, List, Optional
+import networkx as nx
 
 class CorrelationEngine:
     def __init__(self):
         self.graph = nx.DiGraph()
 
-    def correlate_events(self, events: List[Dict]) -> Dict:
-        """Correlate events and build attack timeline"""
-        timeline = {}
-        correlations = {}
+    def correlate_events(self, events: List[Dict[str, Any]]) -> Dict:
+        """Correlate events based on common attributes and temporal relationships"""
+        correlated = {}
 
-        # Group by MITRE tactic/technique
-        for event in events:
-            tactic = event.get('tactic', 'Unknown')
-            if tactic not in timeline:
-                timeline[tactic] = []
-            timeline[tactic].append(event)
+        # Sort events by timestamp
+        sorted_events = sorted(events, key=lambda x: x.get('_time', datetime.min))
 
-        # Build entity correlations
-        entity_types = ['user', 'host', 'process', 'ip']
-        for entity_type in entity_types:
-            correlations[entity_type] = self._correlate_by_entity(events, entity_type)
+        # Group by entities
+        for event in sorted_events:
+            self._add_event_to_graph(event)
 
-        return {
-            'timeline': timeline,
-            'correlations': correlations,
-            'mindmap': self._build_mindmap(events)
+        # Find connected components
+        correlated['chains'] = self._find_attack_chains()
+        correlated['timeline'] = self._build_timeline(sorted_events)
+
+        return correlated
+
+    def _add_event_to_graph(self, event: Dict):
+        """Add event to correlation graph with edges based on relationships"""
+        event_id = event.get('_raw', '')[:32]  # Use truncated raw as unique ID
+        self.graph.add_node(event_id, **event)
+
+        # Add edges based on common attributes
+        for existing_id in self.graph.nodes():
+            if existing_id != event_id:
+                if self._events_are_related(event, self.graph.nodes[existing_id]):
+                    self.graph.add_edge(existing_id, event_id)
+
+    def _events_are_related(self, event1: Dict, event2: Dict) -> bool:
+        """Check if events are related based on common attributes"""
+        common_fields = ['user', 'host', 'process_guid', 'parent_process_guid']
+        return any(
+            event1.get(field) == event2.get(field)
+            for field in common_fields
+            if event1.get(field) and event2.get(field)
+        )
+
+    def _find_attack_chains(self) -> List[List[Dict]]:
+        """Find chains of related events that could represent attack paths"""
+        chains = []
+        for component in nx.weakly_connected_components(self.graph):
+            chain = []
+            subgraph = self.graph.subgraph(component)
+            for node in nx.topological_sort(subgraph):
+                chain.append(self.graph.nodes[node])
+            chains.append(chain)
+        return chains
+
+    def _build_timeline(self, events: List[Dict]) -> Dict:
+        """Build a timeline of events grouped by MITRE tactics"""
+        timeline = {
+            'events': events,
+            'tactics': {},
+            'techniques': {}
         }
 
-    def _correlate_by_entity(self, events: List[Dict], entity_type: str) -> Dict:
-        """Group events by entity type (user, host, process, etc)"""
-        correlations = {}
         for event in events:
-            entity = event.get(entity_type)
-            if entity:
-                if entity not in correlations:
-                    correlations[entity] = []
-                correlations[entity].append(event)
-        return correlations
+            tactic = event.get('mitre_tactic', 'unknown')
+            technique = event.get('mitre_technique', 'unknown')
 
-    def _build_mindmap(self, events: List[Dict]) -> Dict:
-        """Build visual mindmap of correlated events"""
-        mindmap = {'nodes': [], 'links': []}
+            if tactic not in timeline['tactics']:
+                timeline['tactics'][tactic] = []
+            timeline['tactics'][tactic].append(event)
 
-        # Add central node
-        mindmap['nodes'].append({
-            'id': 'root',
-            'label': 'Investigation',
-            'type': 'root'
-        })
+            if technique not in timeline['techniques']:
+                timeline['techniques'][technique] = []
+            timeline['techniques'][technique].append(event)
 
-        # Add event nodes and links
-        for i, event in enumerate(events):
-            node_id = f'event_{i}'
-            mindmap['nodes'].append({
-                'id': node_id,
-                'label': event.get('description', 'Unknown Event'),
-                'type': event.get('tactic', 'unknown'),
-                'suspicion_score': event.get('suspicion_score', 0)
-            })
-            mindmap['links'].append({
-                'source': 'root',
-                'target': node_id,
-                'type': 'contains'
-            })
-
-        return mindmap
-
-    def calculate_suspicion_score(self, event: Dict) -> float:
-        """Calculate suspicion score based on various factors"""
-        score = 0.0
-
-        # Base score from MITRE tactic
-        tactic_scores = {
-            'Execution': 0.6,
-            'Persistence': 0.7,
-            'PrivilegeEscalation': 0.8,
-            'DefenseEvasion': 0.8,
-            'CredentialAccess': 0.9,
-            'Discovery': 0.4,
-            'LateralMovement': 0.8,
-            'Collection': 0.7,
-            'Exfiltration': 0.9,
-            'CommandAndControl': 0.9
-        }
-
-        score += tactic_scores.get(event.get('tactic', ''), 0.5)
-
-        # Adjust based on other factors
-        if event.get('privileged_access', False):
-            score += 0.2
-        if event.get('rare_process', False):
-            score += 0.1
-        if event.get('known_malicious', False):
-            score += 0.3
-
-        return min(score, 1.0)
+        return timeline
