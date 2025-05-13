@@ -1,212 +1,90 @@
-/**
- * Security Hunter Visualization Styles
- * Styling for mind maps, TTP visualizations, and field pivoting
- */
+/* Timeline Styles */
+.timeline {
+    padding: 20px;
+    font-family: Arial, sans-serif;
+}
 
-/* Mind Map Styles */
-#mindmap-container {
+.timeline-group {
+    margin-bottom: 30px;
+    border-left: 3px solid #2196F3;
+    padding-left: 20px;
+}
+
+.timeline-group h3 {
+    color: #2196F3;
+    margin-bottom: 15px;
+}
+
+.timeline-event {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 15px;
+    margin-bottom: 15px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.timeline-event:hover {
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+.event-time {
+    color: #666;
+    font-size: 0.9em;
+    margin-bottom: 5px;
+}
+
+.event-description {
+    margin: 10px 0;
+}
+
+.event-score {
+    font-weight: bold;
+    color: #F44336;
+}
+
+/* Mindmap Styles */
+.mindmap-container {
+    width: 100%;
     height: 600px;
-    border: 1px solid var(--bs-gray-700);
-    border-radius: 5px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
     overflow: hidden;
 }
 
-.node circle {
-    stroke: var(--bs-gray-200);
-    stroke-width: 1.5px;
-}
-
-.node.root circle {
-    fill: var(--bs-primary);
-}
-
-.node.result circle {
-    fill: var(--bs-success);
-}
-
-.node.field circle {
-    fill: var(--bs-warning);
-}
-
-.node.value circle {
-    fill: var(--bs-light);
-}
-
-.node.technique circle {
-    fill: var(--bs-danger);
-}
-
-.node text {
-    font-size: 12px;
-    fill: var(--bs-body-color);
-    pointer-events: none;
-}
-
-.link {
-    fill: none;
-    stroke: var(--bs-gray-600);
-    stroke-width: 1.5px;
-}
-
-/* TTP Visualization Styles */
-.ttp-badge {
-    display: inline-block;
-    margin: 0.2rem;
-    padding: 0.35rem 0.5rem;
-    font-size: 0.75rem;
-    font-weight: 700;
-    line-height: 1;
-    text-align: center;
-    white-space: nowrap;
-    vertical-align: baseline;
-    border-radius: 0.375rem;
-}
-
-.high-match {
-    background-color: var(--bs-danger);
-    color: white;
-}
-
-.medium-match {
-    background-color: var(--bs-warning);
-    color: var(--bs-dark);
-}
-
-.low-match {
-    background-color: var(--bs-info);
-    color: white;
-}
-
-/* TTP Matrix View */
-.tactic-column {
-    min-width: 200px;
-    max-width: 200px;
-}
-
-.technique-cell {
-    padding: 0.5rem;
-    border-radius: 0.25rem;
-    margin-bottom: 0.5rem;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.technique-cell:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-}
-
-.technique-id {
-    font-size: 0.75rem;
-    opacity: 0.8;
-}
-
-.technique-name {
-    font-weight: 500;
-    margin-bottom: 0.25rem;
-}
-
-/* Pivot Links */
-.pivot-link {
-    cursor: pointer;
-    text-decoration: underline;
-    color: var(--bs-link-color);
-}
-
-.pivot-link:hover {
-    color: var(--bs-link-hover-color);
-}
-
-/* Results Table */
-.results-table {
-    width: 100%;
-    margin-bottom: 1rem;
-    color: var(--bs-table-color);
-    vertical-align: top;
-    border-color: var(--bs-table-border-color);
-}
-
-.results-table th,
-.results-table td {
-    padding: 0.5rem;
-    border-bottom: 1px solid var(--bs-gray-700);
-}
-
-/* Raw Results View */
-.raw-results {
-    white-space: pre-wrap;
-    font-family: monospace;
-    max-height: 600px;
-    overflow-y: auto;
-    background-color: var(--bs-gray-900);
-    color: var(--bs-light);
-    padding: 10px;
-    border-radius: 5px;
-}
-
-/* No Results Notice */
-.no-results {
-    color: var(--bs-gray-500);
-    text-align: center;
-    margin-top: 2rem;
-    font-size: 1.2rem;
-}
-
-/* Loading Indicator */
-.loading-indicator {
-    text-align: center;
-    padding: 2rem;
-    color: var(--bs-gray-500);
-}
-
-.loading-indicator .spinner-border {
-    width: 3rem;
-    height: 3rem;
-    margin-bottom: 1rem;
-}
-/* Timeline styles */
-.timeline-node {
-    display: flex;
-    flex-direction: column;
-    padding: 4px;
-}
-
-.node-title {
-    font-weight: bold;
-}
-
-.node-score {
-    font-size: 0.8em;
-    color: #666;
-}
-
-.correlation-lines {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-}
-
-.correlation-line {
+.mindmap-node {
+    fill: white;
+    stroke: #2196F3;
     stroke-width: 2px;
-    stroke-dasharray: 4;
-    opacity: 0.6;
 }
 
-.has-correlation {
-    box-shadow: 0 0 4px rgba(0,0,255,0.4);
+.mindmap-node.root {
+    fill: #2196F3;
 }
 
-.suspicion-0 { background-color: #e3f2fd; }
-.suspicion-1 { background-color: #bbdefb; }
-.suspicion-2 { background-color: #90caf9; }
-.suspicion-3 { background-color: #64b5f6; }
-.suspicion-4 { background-color: #42a5f5; }
-.suspicion-5 { background-color: #2196f3; }
+.mindmap-link {
+    stroke: #999;
+    stroke-width: 1px;
+}
 
-.score-10 { stroke: #f44336; }
-.score-9 { stroke: #ef5350; }
-.score-8 { stroke: #e57373; }
-.score-7 { stroke: #ef9a9a; }
+.node-label {
+    font-size: 12px;
+    fill: #333;
+}
+
+/* Control Panel */
+.visualization-controls {
+    margin: 20px 0;
+    padding: 15px;
+    background: #f5f5f5;
+    border-radius: 4px;
+}
+
+.score-filter {
+    margin: 10px 0;
+}
+
+.score-filter input {
+    width: 200px;
+}
