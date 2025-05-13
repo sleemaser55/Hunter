@@ -19,6 +19,10 @@ class HuntResult:
     matched_queries: int
     results: Dict
     status: str
+    strict_mode: bool = True
+    filters: Dict = {}
+    priority_queue: List = []
+    correlated_events: List = []
 
 class HuntManager:
     def __init__(self, db_path="data/hunts.db"):

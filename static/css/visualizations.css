@@ -164,3 +164,49 @@
     height: 3rem;
     margin-bottom: 1rem;
 }
+/* Timeline styles */
+.timeline-node {
+    display: flex;
+    flex-direction: column;
+    padding: 4px;
+}
+
+.node-title {
+    font-weight: bold;
+}
+
+.node-score {
+    font-size: 0.8em;
+    color: #666;
+}
+
+.correlation-lines {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+.correlation-line {
+    stroke-width: 2px;
+    stroke-dasharray: 4;
+    opacity: 0.6;
+}
+
+.has-correlation {
+    box-shadow: 0 0 4px rgba(0,0,255,0.4);
+}
+
+.suspicion-0 { background-color: #e3f2fd; }
+.suspicion-1 { background-color: #bbdefb; }
+.suspicion-2 { background-color: #90caf9; }
+.suspicion-3 { background-color: #64b5f6; }
+.suspicion-4 { background-color: #42a5f5; }
+.suspicion-5 { background-color: #2196f3; }
+
+.score-10 { stroke: #f44336; }
+.score-9 { stroke: #ef5350; }
+.score-8 { stroke: #e57373; }
+.score-7 { stroke: #ef9a9a; }
