@@ -1,0 +1,58 @@
+
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container">
+    <h2>Hunt History</h2>
+    
+    <div class="mb-3">
+        <input type="text" class="form-control" id="searchInput" placeholder="Search hunts...">
+    </div>
+    
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Type</th>
+                    <th>Target</th>
+                    <th>Queries</th>
+                    <th>Matches</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for hunt in hunts %}
+                <tr>
+                    <td>{{ hunt.start_time }}</td>
+                    <td>{{ hunt.type }}</td>
+                    <td>{{ hunt.target_name }}</td>
+                    <td>{{ hunt.total_queries }}</td>
+                    <td>{{ hunt.matched_queries }}</td>
+                    <td>{{ hunt.status }}</td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" onclick="viewResults('{{ hunt.id }}')">View Results</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+function viewResults(huntId) {
+    window.location.href = `/hunt/${huntId}`;
+}
+
+// Simple search functionality
+document.getElementById('searchInput').addEventListener('input', function(e) {
+    const search = e.target.value.toLowerCase();
+    document.querySelectorAll('tbody tr').forEach(row => {
+        const text = row.textContent.toLowerCase();
+        row.style.display = text.includes(search) ? '' : 'none';
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,116 @@
+
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2>Automated Hunt</h2>
+            <form id="huntForm">
+                <div class="mb-3">
+                    <label class="form-label">Hunt Type</label>
+                    <select class="form-select" id="huntType">
+                        <option value="tactic">MITRE Tactic</option>
+                        <option value="technique">MITRE Technique</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Select Target</label>
+                    <select class="form-select" id="targetSelect"></select>
+                </div>
+                <button type="submit" class="btn btn-primary">Start Hunt</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="row" id="huntProgress" style="display: none;">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h5>Hunt Progress</h5>
+                    <div class="progress mb-3">
+                        <div class="progress-bar" role="progressbar" style="width: 0%"></div>
+                    </div>
+                    <div id="currentQuery">Running query: <span></span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-12">
+            <div id="visualizations">
+                <div id="mindmap"></div>
+                <div id="ttps"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const huntForm = document.getElementById('huntForm');
+    const huntType = document.getElementById('huntType');
+    const targetSelect = document.getElementById('targetSelect');
+    
+    // Load targets based on selected type
+    huntType.addEventListener('change', async () => {
+        const response = await fetch(`/api/hunt/targets?type=${huntType.value}`);
+        const targets = await response.json();
+        targetSelect.innerHTML = targets.map(t => 
+            `<option value="${t.id}">${t.name}</option>`
+        ).join('');
+    });
+
+    // Initialize WebSocket connection
+    const ws = new WebSocket(`ws://${window.location.host}/ws/hunt`);
+    
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'progress') {
+            updateProgress(data);
+        } else if (data.type === 'result') {
+            updateVisualizations(data);
+        }
+    };
+
+    // Handle form submission
+    huntForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const huntData = {
+            type: huntType.value,
+            target: targetSelect.value
+        };
+
+        const response = await fetch('/api/hunt/start', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(huntData)
+        });
+
+        if (response.ok) {
+            document.getElementById('huntProgress').style.display = 'block';
+        }
+    });
+});
+
+function updateProgress(data) {
+    const progressBar = document.querySelector('.progress-bar');
+    const currentQuery = document.querySelector('#currentQuery span');
+    
+    progressBar.style.width = `${data.percent}%`;
+    currentQuery.textContent = data.current_query;
+}
+
+function updateVisualizations(data) {
+    // Update mindmap and TTP visualizations with new data
+    if (window.mindMapVisualization) {
+        window.mindMapVisualization.updateData(data.mindmap);
+    }
+    if (window.ttpVisualization) {
+        window.ttpVisualization.updateData(data.ttps);
+    }
+}
+</script>
+{% endblock %}

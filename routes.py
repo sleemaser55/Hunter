@@ -1031,3 +1031,75 @@ def server_error(e):
     """Handle 500 errors"""
     logger.error(f"Server error: {str(e)}")
     return render_template('index.html', error="Internal server error"), 500
+@app.route('/hunt')
+def hunt_page():
+    """Render the automated hunt page"""
+    return render_template('automated_hunt.html')
+
+@app.route('/hunt/history')
+def hunt_history():
+    """Show hunt history"""
+    hunts = hunt_manager.get_all_hunts()
+    return render_template('hunt_history.html', hunts=hunts)
+
+@app.route('/api/hunt/targets')
+def hunt_targets():
+    """Get available hunt targets based on type"""
+    hunt_type = request.args.get('type')
+    if hunt_type == 'tactic':
+        return jsonify(mitre_parser.get_tactics())
+    else:
+        return jsonify(mitre_parser.get_techniques())
+
+@app.route('/api/hunt/start', methods=['POST'])
+def start_hunt():
+    """Start a new automated hunt"""
+    data = request.json
+    hunt_type = data['type']
+    target_id = data['target']
+    
+    # Get target name
+    if hunt_type == 'tactic':
+        target = mitre_parser.get_tactic_by_id(target_id)
+    else:
+        target = mitre_parser.get_technique_by_id(target_id)
+    
+    target_name = target['name'] if target else target_id
+    
+    # Start the hunt
+    hunt_id = hunt_manager.start_hunt(hunt_type, target_id, target_name)
+    
+    # Start background task
+    @copy_current_request_context
+    def run_hunt():
+        # Get relevant Sigma rules
+        if hunt_type == 'tactic':
+            techniques = mitre_parser.get_techniques(target_id)
+            rules = []
+            for technique in techniques:
+                rules.extend(sigma_loader.get_rules_by_technique(technique['id']))
+        else:
+            rules = sigma_loader.get_rules_by_technique(target_id)
+        
+        total_rules = len(rules)
+        for i, rule in enumerate(rules, 1):
+            # Convert rule to Splunk query
+            query = sigma_loader.convert_rule_to_splunk(rule['id'])
+            if not query:
+                continue
+                
+            # Execute query
+            result = splunk_query.execute_query(query)
+            
+            # Update hunt progress
+            hunt_manager.update_hunt_progress(hunt_id, {
+                'query_id': rule['id'],
+                'query': query,
+                'matches': result.get('results', []),
+                'progress': (i / total_rules) * 100
+            })
+    
+    thread = threading.Thread(target=run_hunt)
+    thread.start()
+    
+    return jsonify({'hunt_id': hunt_id})

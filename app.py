@@ -25,6 +25,7 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 # Initialize core components
 mitre_parser = MitreAttackParser()
 sigma_loader = SigmaLoader()
+hunt_manager = HuntManager()
 splunk_query = SplunkQueryExecutor()
 field_mapper = FieldMapper()
 ttp_mapper = TTPMapper(mitre_parser)
