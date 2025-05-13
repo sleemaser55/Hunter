@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 def copy_current_request_context(f):
     """Decorator to make sure that the request context is available in the thread."""
     @wraps(f)
-    def *wrapper(*args, **kwargs):
+    def wrapper(*args, **kwargs):
         with app.request_context(request.environ):
             return f(*args, **kwargs)
     return wrapper

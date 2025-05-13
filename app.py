@@ -2,6 +2,16 @@ import os
 import logging
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_from_directory
 from werkzeug.middleware.proxy_fix import ProxyFix
+from core.hunt_manager import HuntManager
+from core.apt_manager import APTManager
+from core.mitre_parser import MitreAttackParser 
+from core.sigma_loader import SigmaLoader
+from core.field_mapper import FieldMapper
+from core.splunk_query import SplunkQueryExecutor
+from core.ttp_mapper import TTPMapper
+from core.field_profiler import FieldProfiler
+from core.visualizer import Visualizer
+from core.ai_assistant import AIAssistant
 
 import config
 from core.mitre_parser import MitreAttackParser
@@ -23,15 +33,13 @@ app.secret_key = os.environ.get("SESSION_SECRET", "default-secret-key-for-develo
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 # Initialize core components
-from core.hunt_manager import HuntManager
-from core.apt_manager import APTManager
 mitre_parser = MitreAttackParser()
 sigma_loader = SigmaLoader()
+field_mapper = FieldMapper()
+splunk_query = SplunkQueryExecutor()
+ttp_mapper = TTPMapper(mitre_parser)
 hunt_manager = HuntManager()
 apt_manager = APTManager()
-splunk_query = SplunkQueryExecutor()
-field_mapper = FieldMapper()
-ttp_mapper = TTPMapper(mitre_parser)
 field_profiler = FieldProfiler(sigma_loader, field_mapper, splunk_query)
 visualizer = Visualizer()
 ai_assistant = AIAssistant()
