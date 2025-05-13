@@ -24,9 +24,11 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 # Initialize core components
 from core.hunt_manager import HuntManager
+from core.apt_manager import APTManager
 mitre_parser = MitreAttackParser()
 sigma_loader = SigmaLoader()
 hunt_manager = HuntManager()
+apt_manager = APTManager()
 splunk_query = SplunkQueryExecutor()
 field_mapper = FieldMapper()
 ttp_mapper = TTPMapper(mitre_parser)

@@ -1,4 +1,3 @@
-
 import asyncio
 import json
 import datetime
@@ -27,7 +26,7 @@ class HuntManager:
         self.current_hunts: Dict[str, HuntResult] = {}
         self.result_queue = Queue()
         self.init_db()
-        
+
         # Start background thread for result processing
         self._start_result_processor()
 
@@ -63,7 +62,7 @@ class HuntManager:
             results={},
             status="running"
         )
-        
+
         self.current_hunts[hunt_id] = hunt
         self._save_hunt(hunt)
         return hunt_id
@@ -72,14 +71,14 @@ class HuntManager:
         """Update hunt progress with new query results"""
         if hunt_id not in self.current_hunts:
             return
-            
+
         hunt = self.current_hunts[hunt_id]
         hunt.total_queries += 1
-        
+
         if query_result.get('matches', []):
             hunt.matched_queries += 1
             hunt.results[query_result['query_id']] = query_result
-            
+
         self._save_hunt(hunt)
         self.result_queue.put((hunt_id, query_result))
 
@@ -109,7 +108,7 @@ class HuntManager:
                 hunt_id, result = self.result_queue.get()
                 # Notify websocket clients about new results
                 # This will be implemented in the WebSocket handler
-                
+
         thread = threading.Thread(target=process_results, daemon=True)
         thread.start()
 

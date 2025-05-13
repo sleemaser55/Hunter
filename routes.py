@@ -3,7 +3,7 @@ import logging
 from typing import Dict, List, Optional, Any
 import config
 
-from app import app, mitre_parser, sigma_loader, splunk_query, field_mapper, splunk_connected
+from app import app, mitre_parser, sigma_loader, splunk_query, field_mapper, splunk_connected, apt_manager, hunt_manager
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +147,99 @@ def api_convert_sigma_yaml():
         try:
             import sigma
             from sigma.backends.splunk import SplunkBackend
+
+@app.route('/apt_hunt')
+def apt_hunt():
+    """Render the APT-based hunt page"""
+    return render_template('apt_hunt.html')
+
+@app.route('/api/hunt/apts')
+def get_apts():
+    """Get all APT groups"""
+    return jsonify(apt_manager.get_all_apts())
+
+@app.route('/api/hunt/apt/<apt_id>')
+def get_apt_details(apt_id):
+    """Get APT details with available/unavailable techniques"""
+    apt = apt_manager.get_apt(apt_id)
+    if not apt:
+        return jsonify({'error': 'APT not found'}), 404
+    
+    # Check which techniques have Sigma rules
+    available = []
+    unavailable = []
+    
+    for technique_id in apt['techniques']:
+        technique = mitre_parser.get_technique_by_id(technique_id)
+        if not technique:
+            continue
+            
+        sigma_rules = sigma_loader.get_rules_by_technique(technique_id)
+        if sigma_rules:
+            available.append({
+                'id': technique_id,
+                'name': technique['name'],
+                'tactic': technique['tactics'][0] if technique['tactics'] else 'Unknown',
+                'rules_count': len(sigma_rules)
+            })
+        else:
+            unavailable.append({
+                'id': technique_id,
+                'name': technique['name'],
+                'tactic': technique['tactics'][0] if technique['tactics'] else 'Unknown'
+            })
+            
+    return jsonify({
+        'name': apt['name'],
+        'description': apt['description'],
+        'available_techniques': available,
+        'unavailable_techniques': unavailable
+    })
+
+@app.route('/api/hunt/apt/start', methods=['POST'])
+def start_apt_hunt():
+    """Start APT-based hunt"""
+    data = request.json
+    if not data or 'apt_id' not in data or 'techniques' not in data:
+        return jsonify({'error': 'Missing required fields'}), 400
+        
+    apt = apt_manager.get_apt(data['apt_id'])
+    if not apt:
+        return jsonify({'error': 'APT not found'}), 404
+        
+    # Create hunt with ordered techniques
+    hunt_id = hunt_manager.start_hunt(
+        hunt_type="apt",
+        target_id=data['apt_id'],
+        target_name=apt['name']
+    )
+    
+    # Start hunt in background
+    def run_hunt():
+        for technique in data['techniques']:
+            sigma_rules = sigma_loader.get_rules_by_technique(technique['id'])
+            for rule in sigma_rules:
+                query = sigma_loader.convert_rule_to_splunk(rule['id'])
+                if query:
+                    result = splunk_query.execute_query(query)
+                    hunt_manager.update_hunt_progress(hunt_id, {
+                        'query_id': rule['id'],
+                        'technique_id': technique['id'],
+                        'matches': result.get('matches', [])
+                    })
+    
+    thread = Thread(target=run_hunt)
+    thread.start()
+    
+    return jsonify({'hunt_id': hunt_id})
+
+@app.route('/results')
+def view_results():
+    """View all hunt results"""
+    return render_template('hunt_results.html',
+                         current_hunts=hunt_manager.get_current_hunts(),
+                         completed_hunts=hunt_manager.get_completed_hunts())
+
             from sigma.collection import SigmaCollection
             from sigma.rule import SigmaRule
             
