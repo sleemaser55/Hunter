@@ -47,7 +47,8 @@ class HuntManager:
                 )
             """)
 
-    def start_hunt(self, hunt_type: str, target_id: str, target_name: str) -> str:
+    def start_hunt(self, hunt_type: str, target_id: str, target_name: str,
+                  strict_mode: bool = True, filters: Dict = None) -> str:
         """Start a new hunt and return its ID"""
         hunt_id = f"hunt_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
         hunt = HuntResult(
@@ -60,7 +61,11 @@ class HuntManager:
             total_queries=0,
             matched_queries=0,
             results={},
-            status="running"
+            status="running",
+            strict_mode=strict_mode,
+            filters=filters or {},
+            priority_queue=[],
+            correlated_events=[]
         )
 
         self.current_hunts[hunt_id] = hunt
