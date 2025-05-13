@@ -1,0 +1,127 @@
+1.Build “Analyst-Guided Open Hunting” Workflows
+Goal: Help analysts hunt without writing a single query — not even choosing Sigma rules manually.
+Let the user choose a tactic or technique (from a UI drop-down or MITRE Navigator–style grid).
+
+Automatically fetch all relevant Sigma rules.
+
+Generate both:
+
+Strict detection queries (tight, exact matches)
+
+Loose open-hunt queries (fuzzier logic — partial matches, heuristics)
+
+Run both types and show side-by-side results.
+
+2.Introduce Feedback-Driven Query Refinement
+Let users filter out fields or values (e.g., exclude process names, IPs).
+
+Auto-rebuild the query with filters applied.
+
+Rerun hunt instantly — call this “one-click pivot hunting.”
+
+3.Auto-Correlation + Attack Timeline Builder
+Pain Point: Analysts struggle to see how individual anomalies connect.
+
+Feature:
+
+Group hunt results into MITRE tactics or Cyber Kill Chain phases.
+
+Automatically stitch together correlated events by user, IP, host, session, or process chain.
+
+Render as an attack timeline or investigation mindmap.Auto-Correlation + Attack Timeline Builder
+
+Feature:
+
+Group hunt results into MITRE tactics or Cyber Kill Chain phases.
+
+Automatically stitch together correlated events by user, IP, host, session, or process chain.
+
+Render as an attack timeline or investigation mindmap.
+
+Build Visual Mindmaps with Pivots
+Here’s how to make mindmaps meaningful for threat hunting:
+
+Center node: Suspicious entity (host, user, process)
+
+Branches: Events, commands, network connections, logons
+
+Icons/colors: Represent tactic (Execution, Persistence, etc.)
+
+Clicking a node could pivot to:
+
+Related events
+
+Similar behavior from other users/systems
+
+Next hunt step (linked technique)
+
+Mindmaps should show:
+
+Sequence
+
+Suspicion level
+
+MITRE context
+
+Add Suspicion Scoring & Enrichment
+Assign scores to each result (e.g., access to LSASS = 80/100)
+Enrich with:
+
+Threat intel (VirusTotal, Shodan, etc.)
+
+Process reputation (signed? known tool?)
+
+Let user sort/filter by threat score
+Explore Behavioral Detection
+Introduce ML/anomaly logic later:
+
+Profile normal behavior (e.g., PowerShell only from certain users)
+
+Alert when something deviates
+
+Use Isolation Forest, Z-score, etc.
+
+Re-run Hunts as Scheduled Campaigns
+Let users convert ad-hoc hunts into scheduled jobs
+
+Show trending data (e.g., spike in suspicious PowerShell this week)
+
+6.Group Results into Logical Entities
+Instead of mapping every log line, cluster results around:
+
+Users
+
+Hosts
+
+Processes
+
+Tactics or Kill Chain Phase
+
+This compresses hundreds of logs into a few meaningful nodes.
+
+8.Use Suspicion Scoring to Limit Visual Noise
+Assign scores to events (e.g., based on MITRE tag, anomaly detection, or enrichment), and only include the top N results in the mindmap.
+
+Add a toggle:
+
+“Show top 10 most suspicious chains”
+“Expand full activity for this user/process”
+
+Time-Based Collapsing
+If a user ran 200 PowerShell commands in a minute, you don’t need 200 nodes.
+Instead:
+
+Collapse into one node: “PowerShell activity spike (200 commands)”
+
+Expand on click only if needed
+
+11.Visual Decay or Layering
+Use layered nodes or radial layouts, with:
+
+Center = Entity (user/host)
+
+Inner layer = Top technique results
+
+Outer layers = Optional expanded details
+
+Users explore the graph like peeling an onion.
