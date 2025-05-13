@@ -32,7 +32,7 @@ def check_splunk_status():
 def index():
     """Render the home page"""
     splunk_status = check_splunk_status()
-    return render_template('index.html', 
+    return render_template('layout.html', 
                           splunk_connected=splunk_status,
                           splunk_host=f"{config.SPLUNK_HOST}:{config.SPLUNK_PORT}",
                           limited_mode=not splunk_status)
