@@ -44,10 +44,14 @@ field_profiler = FieldProfiler(sigma_loader, field_mapper, splunk_query)
 visualizer = Visualizer()
 ai_assistant = AIAssistant()
 
-# Connect to Splunk (done here so we don't have to reconnect for every request)
-splunk_connected = splunk_query.connect()
-if not splunk_connected:
-    logger.warning("Failed to connect to Splunk on startup")
+# Try to connect to Splunk but don't block app startup
+try:
+    splunk_connected = splunk_query.connect()
+    if not splunk_connected:
+        logger.warning("Failed to connect to Splunk on startup - continuing in limited mode")
+except Exception as e:
+    logger.warning(f"Error connecting to Splunk on startup: {e} - continuing in limited mode")
+    splunk_connected = False
 
 # Add a favicon route to prevent 404 errors
 @app.route('/favicon.ico')

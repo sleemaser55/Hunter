@@ -18,17 +18,24 @@ def copy_current_request_context(f):
             return f(*args, **kwargs)
     return wrapper
 
+def check_splunk_status():
+    """Helper to check Splunk status without blocking"""
+    global splunk_connected
+    if not splunk_connected:
+        try:
+            splunk_connected = splunk_query.connect()
+        except:
+            splunk_connected = False
+    return splunk_connected
+
 @app.route('/')
 def index():
     """Render the home page"""
-    global splunk_connected
-    # Try to connect to Splunk if not already connected
-    if not splunk_connected:
-        splunk_connected = splunk_query.connect()
-
+    splunk_status = check_splunk_status()
     return render_template('index.html', 
-                          splunk_connected=splunk_connected,
-                          splunk_host=f"{config.SPLUNK_HOST}:{config.SPLUNK_PORT}")
+                          splunk_connected=splunk_status,
+                          splunk_host=f"{config.SPLUNK_HOST}:{config.SPLUNK_PORT}",
+                          limited_mode=not splunk_status)
 
 @app.route('/test_visualization')
 def test_visualization():
