@@ -20,9 +20,12 @@ class HuntResult:
     results: Dict
     status: str
     strict_mode: bool = True
-    filters: Dict = {}
-    priority_queue: List = []
-    correlated_events: List = []
+    filters: Dict = field(default_factory=dict)
+    priority_queue: List = field(default_factory=list)
+    correlated_events: List = field(default_factory=list)
+    attack_timeline: Dict = field(default_factory=dict)
+    suspicion_score: float = 0.0
+    enrichment_data: Dict = field(default_factory=dict)
 
 class HuntManager:
     def __init__(self, db_path="data/hunts.db"):
