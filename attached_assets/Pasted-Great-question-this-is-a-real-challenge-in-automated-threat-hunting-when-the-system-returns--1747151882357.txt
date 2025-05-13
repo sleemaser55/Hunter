@@ -1,0 +1,86 @@
+Great question — this is a **real** challenge in automated threat hunting: when the system returns **too many results**, how do you avoid turning the mindmap into a spaghetti mess?
+
+Here’s how you can solve this with smart design and filtering:
+
+---
+
+### **1. Group Results into Logical Entities**
+
+Instead of mapping every log line, **cluster results** around:
+
+* **Users**
+* **Hosts**
+* **Processes**
+* **Tactics or Kill Chain Phase**
+
+**Mindmap example:**
+
+```
+                [User: admin]
+                      |
+        +-------------+--------------+
+        |                            |
+  [Process: powershell.exe]   [Process: psexec.exe]
+        |                            |
+ [Accessed: lsass.exe]         [Connected: host B]
+```
+
+This **compresses hundreds of logs** into a few meaningful nodes.
+
+---
+
+### **2. Use Suspicion Scoring to Limit Visual Noise**
+
+Assign scores to events (e.g., based on MITRE tag, anomaly detection, or enrichment), and **only include the top N results** in the mindmap.
+
+Add a toggle:
+
+> “Show top 10 most suspicious chains”
+> “Expand full activity for this user/process”
+
+---
+
+### **3. Time-Based Collapsing**
+
+If a user ran 200 PowerShell commands in a minute, you don’t need 200 nodes.
+
+Instead:
+
+* Collapse into one node: **“PowerShell activity spike (200 commands)”**
+* Expand on click only if needed
+
+---
+
+### **4. Pivot Paths Only, Not Everything**
+
+Only show paths that:
+
+* Link 2+ tactics (e.g., Execution → Lateral Movement)
+* Lead to an enriched IOC (e.g., connection to known malicious IP)
+* Come from a suspicious parent process
+
+This keeps the map focused on **suspicious chains**, not every log.
+
+---
+
+### **5. Visual Decay or Layering**
+
+Use **layered nodes or radial layouts**, with:
+
+* Center = Entity (user/host)
+* Inner layer = Top technique results
+* Outer layers = Optional expanded details
+
+Users explore the graph like peeling an onion.
+
+---
+
+### Summary: Smart Mindmap for Large Hunts
+
+| Problem               | Solution                                      |
+| --------------------- | --------------------------------------------- |
+| Too many results      | Group by entity (user/host/process)           |
+| Visual clutter        | Score and cap top N most suspicious           |
+| Repetitive logs       | Collapse repeated patterns (e.g., 100 logons) |
+| Not all events useful | Show only linked/pivotable ones               |
+| Hard to explore       | Click to expand chain stages or tactics       |
