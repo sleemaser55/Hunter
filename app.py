@@ -23,6 +23,7 @@ app.secret_key = os.environ.get("SESSION_SECRET", "default-secret-key-for-develo
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 # Initialize core components
+from core.hunt_manager import HuntManager
 mitre_parser = MitreAttackParser()
 sigma_loader = SigmaLoader()
 hunt_manager = HuntManager()
