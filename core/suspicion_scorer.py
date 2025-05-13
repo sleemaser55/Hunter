@@ -78,3 +78,41 @@ class SuspicionScorer:
             'first_seen': event.get('first_seen'),
             'similar_events': []
         }
+from typing import Dict, List, Any
+import re
+
+class SuspicionScorer:
+    def __init__(self):
+        self.high_risk_patterns = {
+            'lsass': 80,
+            'mimikatz': 90,
+            'powershell.*bypass': 70,
+            'certutil.*decode': 60,
+            'bitsadmin.*download': 50
+        }
+        
+    def score_event(self, event: Dict[str, Any]) -> float:
+        """Score an individual event based on multiple factors"""
+        base_score = 0
+        
+        # Check command patterns
+        command = str(event.get('CommandLine', '')).lower()
+        for pattern, score in self.high_risk_patterns.items():
+            if re.search(pattern, command):
+                base_score = max(base_score, score)
+        
+        # Adjust based on MITRE tactic
+        tactic = event.get('mitre_tactic', '').lower()
+        if tactic in ['execution', 'privilege-escalation', 'defense-evasion']:
+            base_score += 10
+        
+        # Normalize score
+        return min(100, max(0, base_score))
+
+    def score_chain(self, events: List[Dict[str, Any]]) -> float:
+        """Score a chain of related events"""
+        if not events:
+            return 0
+        
+        individual_scores = [self.score_event(e) for e in events]
+        return sum(individual_scores) / len(individual_scores)

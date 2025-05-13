@@ -67,3 +67,15 @@ class TimelineVisualization {
         // Trigger a new hunt based on selected event attributes
     }
 }
+
+function createTimelineVisualization(data, options = {}) {
+    const {
+        showLayered = true,
+        collapseThreshold = 200,
+        maxSuspicionScore = 100
+    } = options;
+
+    // Create the timeline visualization with layers
+    const container = document.getElementById('timeline-container');
+    const layerContainer = showLayered ? createLayerContainer() : null;
+}
