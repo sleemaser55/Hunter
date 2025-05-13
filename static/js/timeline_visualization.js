@@ -1,84 +1,63 @@
-class TimelineVisualization {
-    constructor(container) {
-        this.container = container;
-        this.timeline = null;
-    }
+function createTimeline(data) {
+    const container = document.getElementById('timeline-container');
+    container.innerHTML = '';
 
-    render(data) {
-        // Clear previous visualization
-        this.container.innerHTML = '';
-        
-        // Group events by severity/suspicion score
-        const groupedEvents = this._groupEventsBySeverity(data.events);
+    // Group events by tactic
+    const groupedEvents = {};
+    data.forEach(event => {
+        const tactic = event.mitre_tactic || 'Unknown';
+        if (!groupedEvents[tactic]) {
+            groupedEvents[tactic] = [];
+        }
+        groupedEvents[tactic].push(event);
+    });
 
-        const timelineDiv = document.createElement('div');
-        timelineDiv.className = 'attack-timeline';
+    // Create timeline groups
+    const groups = Object.keys(groupedEvents).map((tactic, index) => ({
+        id: index,
+        content: tactic,
+        nestedGroups: [],
+        showNested: false
+    }));
 
-        // Create timeline sections for each tactic
-        Object.entries(data.tactics).forEach(([tactic, events]) => {
-            const tacticSection = this._createTacticSection(tactic, events);
-            timelineDiv.appendChild(tacticSection);
-        });
-
-        this.container.appendChild(timelineDiv);
-    }
-
-    _createTacticSection(tactic, events) {
-        const section = document.createElement('div');
-        section.className = 'timeline-section';
-
-        const header = document.createElement('h3');
-        header.textContent = tactic;
-        section.appendChild(header);
-
-        const eventList = document.createElement('ul');
-        eventList.className = 'timeline-events';
-
+    // Create timeline items
+    const items = [];
+    let itemId = 0;
+    Object.entries(groupedEvents).forEach(([tactic, events], groupIndex) => {
         events.forEach(event => {
-            const eventItem = this._createEventItem(event);
-            eventList.appendChild(eventItem);
+            items.push({
+                id: itemId++,
+                group: groupIndex,
+                content: event.description || event.type,
+                start: new Date(event._time),
+                title: JSON.stringify(event, null, 2),
+                className: `event-${event.severity || 'info'}`
+            });
         });
+    });
 
-        section.appendChild(eventList);
-        return section;
-    }
+    // Initialize timeline
+    const timeline = new vis.Timeline(container, new vis.DataSet(items), {
+        groupOrder: 'content',
+        orientation: 'top',
+        stack: true,
+        zoomable: true,
+        groupEditable: false,
+        editable: false
+    });
 
-    _createEventItem(event) {
-        const item = document.createElement('li');
-        item.className = 'timeline-event';
-
-        const time = document.createElement('span');
-        time.className = 'event-time';
-        time.textContent = new Date(event._time).toLocaleString();
-
-        const description = document.createElement('span');
-        description.className = 'event-description';
-        description.textContent = event._raw;
-
-        item.appendChild(time);
-        item.appendChild(description);
-
-        // Add click handler for pivoting
-        item.addEventListener('click', () => this._pivotToEvent(event));
-
-        return item;
-    }
-
-    _pivotToEvent(event) {
-        // Implement pivot logic
-        console.log('Pivot to event:', event);
-        // Trigger a new hunt based on selected event attributes
-    }
+    // Add click handlers
+    timeline.on('select', function(properties) {
+        if (properties.items.length) {
+            const item = items.find(i => i.id === properties.items[0]);
+            showEventDetails(item);
+        }
+    });
 }
 
-function createTimelineVisualization(data, options = {}) {
-    const {
-        showLayered = true,
-        collapseThreshold = 200,
-        maxSuspicionScore = 100
-    } = options;
-
-    // Create the timeline visualization with layers
-    const container = document.getElementById('timeline-container');
-    const layerContainer = showLayered ? createLayerContainer() : null;
+function showEventDetails(item) {
+    const modal = document.getElementById('event-details-modal');
+    const content = document.getElementById('event-details-content');
+    content.innerHTML = `<pre>${item.title}</pre>`;
+    new bootstrap.Modal(modal).show();
 }

@@ -274,7 +274,7 @@ def start_apt_hunt():
 
     return jsonify({'hunt_id': hunt_id})
 
-@app.route('/results')
+@app.route('/view_results')
 def view_results():
     """View all hunt results"""
     return render_template('hunt_results.html',
@@ -691,7 +691,7 @@ def sigma_execute():
                           splunk_host=f"{config.SPLUNK_HOST}:{config.SPLUNK_PORT}")
 
 @app.route('/results')
-def view_results():
+def view_query_results():
     """View query results page"""
     result_id = request.args.get('id')
     if not result_id:
@@ -1172,6 +1172,7 @@ def start_hunt():
     hunt_id = hunt_manager.start_hunt(hunt_type, target_id, target_name)
 
     # Start background task
+    import threading
     @copy_current_request_context
     def run_hunt():
         # Get relevant Sigma rules

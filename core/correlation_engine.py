@@ -1,102 +1,63 @@
+import logging
 from typing import List, Dict, Any
-from datetime import datetime
-import networkx as nx
+from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
 
 class CorrelationEngine:
     def __init__(self):
-        self.graph = nx.DiGraph()
+        self.events_cache = []
+        self.correlation_window = timedelta(hours=24)
 
-    def correlate_events(self, events: List[Dict[str, Any]]) -> Dict:
-        """Correlate events based on common attributes and temporal relationships"""
-        correlated = {}
-
-        # Sort events by timestamp
-        sorted_events = sorted(events, key=lambda x: x.get('_time', datetime.min))
-
-        # Group by entities
-        for event in sorted_events:
-            self._add_event_to_graph(event)
-
-        # Find connected components
-        correlated['chains'] = self._find_attack_chains()
-        correlated['timeline'] = self._build_timeline(sorted_events)
-
-        return correlated
-
-    def _add_event_to_graph(self, event: Dict):
-        """Add event to correlation graph with edges based on relationships"""
-        event_id = event.get('_raw', '')[:32]  # Use truncated raw as unique ID
-        self.graph.add_node(event_id, **event)
-
-        # Add edges based on common attributes
-        for existing_id in self.graph.nodes():
-            if existing_id != event_id:
-                if self._events_are_related(event, self.graph.nodes[existing_id]):
-                    self.graph.add_edge(existing_id, event_id)
-
-    def _events_are_related(self, event1: Dict, event2: Dict) -> bool:
-        """Check if events are related based on common attributes"""
-        common_fields = ['user', 'host', 'process_guid', 'parent_process_guid']
-        return any(
-            event1.get(field) == event2.get(field)
-            for field in common_fields
-            if event1.get(field) and event2.get(field)
-        )
-
-    def _find_attack_chains(self, collapse_threshold: int = 200, time_window: int = 60, suspicion_threshold: float = 50.0) -> List[List[Dict]]:
-        """Find attack chains with improved scoring and noise reduction"""
-        chains = []
-        for component in nx.weakly_connected_components(self.graph):
-            chain = []
-            subgraph = self.graph.subgraph(component)
-
-            # Group events by time windows
-            events_by_time = {}
-            for node in nx.topological_sort(subgraph):
-                event = self.graph.nodes[node]
-                timestamp = event.get('_time', 0)
-                window_key = int(timestamp / time_window)
-                if window_key not in events_by_time:
-                    events_by_time[window_key] = []
-                events_by_time[window_key].append(event)
-
-            # Collapse events if threshold exceeded
-            for window_events in events_by_time.values():
-                if len(window_events) > collapse_threshold:
-                    # Create summary node
-                    summary = {
-                        'type': 'summary',
-                        'count': len(window_events),
-                        'command': window_events[0].get('command', 'activity'),
-                        'start_time': min(e.get('_time', 0) for e in window_events),
-                        'end_time': max(e.get('_time', 0) for e in window_events),
-                        'events': window_events
-                    }
-                    chain.append(summary)
-                else:
-                    chain.extend(window_events)
-
-            chains.append(chain)
-        return chains
-
-    def _build_timeline(self, events: List[Dict]) -> Dict:
-        """Build a timeline of events grouped by MITRE tactics"""
-        timeline = {
-            'events': events,
-            'tactics': {},
-            'techniques': {}
-        }
-
+    def add_events(self, events: List[Dict[str, Any]]):
+        """Add new events to correlation engine"""
         for event in events:
-            tactic = event.get('mitre_tactic', 'unknown')
-            technique = event.get('mitre_technique', 'unknown')
+            if '_time' not in event:
+                event['_time'] = datetime.now()
+            self.events_cache.append(event)
+        self._cleanup_old_events()
 
-            if tactic not in timeline['tactics']:
-                timeline['tactics'][tactic] = []
-            timeline['tactics'][tactic].append(event)
+    def _cleanup_old_events(self):
+        """Remove events older than correlation window"""
+        cutoff_time = datetime.now() - self.correlation_window
+        self.events_cache = [
+            event for event in self.events_cache 
+            if event['_time'] > cutoff_time
+        ]
 
-            if technique not in timeline['techniques']:
-                timeline['techniques'][technique] = []
-            timeline['techniques'][technique].append(event)
+    def correlate_by_field(self, field: str) -> List[Dict[str, Any]]:
+        """Group events by a common field value"""
+        correlations = {}
+        for event in self.events_cache:
+            if field in event:
+                field_value = event[field]
+                if field_value not in correlations:
+                    correlations[field_value] = []
+                correlations[field_value].append(event)
+        return list(correlations.values())
 
-        return timeline
+    def correlate_events(self) -> List[Dict[str, Any]]:
+        """Correlate events based on common fields"""
+        correlations = []
+
+        # Correlate by fields
+        for field in ['user', 'host', 'ip', 'session_id', 'process_guid']:
+            field_correlations = self.correlate_by_field(field)
+            correlations.extend(field_correlations)
+
+        # Sort correlated events by time
+        for correlation in correlations:
+            correlation.sort(key=lambda x: x['_time'])
+
+        return correlations
+
+    def group_by_tactic(self, events: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+        """Group events by MITRE tactic"""
+        grouped = {}
+        for event in events:
+            if 'mitre_tactic' in event:
+                tactic = event['mitre_tactic']
+                if tactic not in grouped:
+                    grouped[tactic] = []
+                grouped[tactic].append(event)
+        return grouped
