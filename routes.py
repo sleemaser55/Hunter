@@ -4,7 +4,8 @@ from typing import Dict, List, Optional, Any
 import config
 
 from app import app, mitre_parser, sigma_loader, splunk_query, field_mapper, splunk_connected, apt_manager, hunt_manager
-from threading import Thread, current_app
+from threading import Thread
+from flask import current_app
 from functools import wraps
 
 logger = logging.getLogger(__name__)
